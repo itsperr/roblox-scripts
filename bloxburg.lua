@@ -162,48 +162,41 @@ end
 local hookInstalled = false
 local hookedMT, hookedOld
 
+-- Replace the hook section with this:
 hookInstalled = pcall(function()
     local mt  = getrawmetatable(game)
     local old = mt.__namecall
     hookedMT, hookedOld = mt, old
 
     setreadonly(mt, false)
-
     mt.__namecall = newcclosure(function(self, ...)
         local method = getnamecallmethod()
-
-        -- FAST PATH: spy off, suppressed, or irrelevant method → call original
-        -- directly. This is the common case and must be as cheap as possible.
-        if not spyEnabled or suppress
-            or (method ~= "FireServer" and method ~= "InvokeServer") then
-            return old(self, ...)
+        
+        -- Always call original first to ensure game function works
+        -- Then log after if needed
+        if spyEnabled and not suppress and method and (method == "FireServer" or method == "InvokeServer") then
+            if typeof(self) == "Instance" and self.ClassName ~= nil
+                and (self.ClassName == "RemoteEvent"
+                  or self.ClassName == "RemoteFunction"
+                  or self.ClassName == "UnreliableRemoteEvent") then
+                
+                -- Wrap logging in pcall so it never breaks the game
+                task.spawn(function()
+                    local args = { ... }
+                    local success, err = pcall(function()
+                        if not shouldIgnore(self, args) then
+                            recordFire(self, args)
+                        end
+                    end)
+                    if not success then
+                        warn("BloxburgDupe Spy Error: " .. tostring(err))
+                    end
+                end)
+            end
         end
-
-        -- SLOW PATH: attempt to log.  ANY failure here is swallowed so that
-        -- the original remote call below ALWAYS executes.  This is what
-        -- previously caused placement / take / fridge interactions to hang
-        -- and the character's hand animation to glitch out.
-        pcall(function()
-            if typeof(self) ~= "Instance" then return end
-            local cn = self.ClassName
-            if cn ~= "RemoteEvent"
-                and cn ~= "RemoteFunction"
-                and cn ~= "UnreliableRemoteEvent" then
-                return
-            end
-            local args = { ... }
-            if not shouldIgnore(self, args) then
-                recordFire(self, args)
-            end
-        end)
-
-        -- Yield-safe: for InvokeServer this MUST be allowed to yield.  Modern
-        -- executors (Synapse, Script-Ware, Wave, …) provide a yield-safe
-        -- newcclosure.  If yours does not, InvokeServer spying must instead
-        -- be done via hookfunction on the specific RemoteFunction.
+        
         return old(self, ...)
     end)
-
     setreadonly(mt, true)
 end)
 
