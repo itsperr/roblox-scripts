@@ -1,23 +1,5 @@
 --=============================================================================
---  BLOXBURG DUPE  v3  ·  PACKET FINDER + REMOTE REPLAY
---=============================================================================
---  New in v3 (fixes log spam):
---    · Packets AGGREGATE by signature -> 500 identical fires = 1 row with xN
---    · Auto-mute: anything firing > 25/s is hidden automatically [U]
---    · RECORD WINDOW [R]: samples 1s of background chatter as a baseline,
---      then records 3s and shows ONLY packets that were not already firing.
---      -> press [R], then do the action. Your packet is the only new row.
---    · Freeze [F2], text filter box, live rate/s on every row
---
---  WORKFLOW:
---    1. Press [R]. Wait for "RECORDING" (takes 1s to baseline).
---    2. Do the action ONCE (take the cookie).
---    3. The new packet appears in the top CAPTURED box. Click it (or [G]).
---    4. [B] floods it. [H] swaps slot, [V] scatters with slot B.
---
---  HOTKEYS: [R] record  [F2] freeze  [U] mute noisy  [G] grab newest
---           [H] swap slot  [B] flood A  [V] scatter B  [N] auto-place
---           [M] burst/spread  [K] clear  [P] set scatter origin
+--  BLOXBURG DUPE  v3  ·  PACKET FINDER + REMOTE REPLAY (MOBILE HORIZONTAL UI)
 --=============================================================================
 
 if getgenv().BDupeV3_Cleanup then getgenv().BDupeV3_Cleanup() end
@@ -94,17 +76,15 @@ local function argString(args)
     for i = 1, math.min(#args, 5) do parts[#parts + 1] = describe(args[i]) end
     if #args > 5 then parts[#parts + 1] = "..." end
     local s = table.concat(parts, ", ")
-    if #s > 52 then s = s:sub(1, 49) .. "..." end
+    if #s > 45 then s = s:sub(1, 42) .. "..." end
     return s
 end
 
--- coarse key: remote name + packet-name string + arg TYPES.
--- This is what makes aggregation and the baseline diff work.
 local function signature(remote, args)
     local parts = { remote.Name }
     for i = 1, math.min(#args, 3) do
-        local v  = args[i]
-        local t  = typeof(v)
+        local v = args[i]
+        local t = typeof(v)
         if t == "string" then
             parts[#parts + 1] = "s:" .. v
         elseif t == "Instance" then
@@ -173,7 +153,7 @@ local hookOK, hookedMT, hookedOld = pcall(function()
 end)
 
 --=============================================================================
--- UI
+-- UI (HORIZONTAL / MOBILE-OPTIMIZED)
 --=============================================================================
 local playerGui = player:WaitForChild("PlayerGui")
 local uiParent  = (typeof(gethui) == "function" and gethui()) or playerGui
@@ -186,36 +166,43 @@ screenGui.Name = "BDupeV3UI"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = uiParent
 
+-- Dimensions: 500w x 206h (fits landscape screens easily)
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 262, 0, 430)
-mainFrame.Position = UDim2.new(0.5, -131, 0.5, -215)
+mainFrame.Size = UDim2.new(0, 500, 0, 206)
+mainFrame.Position = UDim2.new(0.5, -250, 0.5, -103)
 mainFrame.BackgroundColor3 = Color3.fromRGB(22, 24, 30)
 mainFrame.BackgroundTransparency = 0.12
 mainFrame.Parent = screenGui
-Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 10)
+Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 8)
 
 local dragBar = Instance.new("Frame")
-dragBar.Size = UDim2.new(1, 0, 0, 28)
+dragBar.Size = UDim2.new(1, 0, 0, 24)
 dragBar.BackgroundColor3 = Color3.fromRGB(42, 46, 56)
 dragBar.BorderSizePixel = 0
 dragBar.Parent = mainFrame
-Instance.new("UICorner", dragBar).CornerRadius = UDim.new(0, 10)
+Instance.new("UICorner", dragBar).CornerRadius = UDim.new(0, 8)
 
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -40, 1, 0); title.Position = UDim2.new(0, 12, 0, 0)
+title.Size = UDim2.new(1, -40, 1, 0)
+title.Position = UDim2.new(0, 10, 0, 0)
 title.BackgroundTransparency = 1
 title.Text = "Bloxburg Dupe v3 · PACKET FINDER"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
-title.TextSize = 12; title.Font = Enum.Font.GothamBold
+title.TextSize = 11; title.Font = Enum.Font.GothamBold
 title.TextXAlignment = Enum.TextXAlignment.Left
 title.Parent = dragBar
 
 local minimizeBtn = Instance.new("TextButton")
-minimizeBtn.Size = UDim2.new(0, 22, 0, 22); minimizeBtn.Position = UDim2.new(1, -26, 0, 3)
-minimizeBtn.BackgroundColor3 = Color3.fromRGB(255, 170, 0); minimizeBtn.Text = "–"
-minimizeBtn.TextColor3 = Color3.fromRGB(255, 255, 255); minimizeBtn.TextSize = 16
-minimizeBtn.Font = Enum.Font.GothamBold; minimizeBtn.ZIndex = 2; minimizeBtn.Parent = dragBar
-Instance.new("UICorner", minimizeBtn).CornerRadius = UDim.new(0, 6)
+minimizeBtn.Size = UDim2.new(0, 20, 0, 18)
+minimizeBtn.Position = UDim2.new(1, -24, 0, 3)
+minimizeBtn.BackgroundColor3 = Color3.fromRGB(255, 170, 0)
+minimizeBtn.Text = "–"
+minimizeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+minimizeBtn.TextSize = 14
+minimizeBtn.Font = Enum.Font.GothamBold
+minimizeBtn.ZIndex = 2
+minimizeBtn.Parent = dragBar
+Instance.new("UICorner", minimizeBtn).CornerRadius = UDim.new(0, 5)
 
 local function makeDraggable(handle, target)
     local dragging, dragInput, dragStart, startPos, moved = false, nil, nil, nil, false
@@ -250,87 +237,93 @@ local function mkButton(text, x, y, w, h, color, size)
     b.Size = UDim2.new(0, w, 0, h); b.Position = UDim2.new(0, x, 0, y)
     b.BackgroundColor3 = color; b.Text = text
     b.TextColor3 = Color3.fromRGB(255, 255, 255)
-    b.TextSize = size or 11; b.Font = Enum.Font.GothamBold
+    b.TextSize = size or 10; b.Font = Enum.Font.GothamBold
     b.Parent = mainFrame
-    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 6)
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 5)
     return b
 end
 
-local function mkLabel(text, y, h, color, size)
+local function mkLabel(text, x, y, w, h, color, size)
     local l = Instance.new("TextLabel")
-    l.Size = UDim2.new(1, -20, 0, h); l.Position = UDim2.new(0, 10, 0, y)
+    l.Size = UDim2.new(0, w, 0, h); l.Position = UDim2.new(0, x, 0, y)
     l.BackgroundTransparency = 1; l.Text = text
     l.TextColor3 = color or Color3.fromRGB(180, 185, 195)
-    l.TextSize = size or 10; l.Font = Enum.Font.Gotham
+    l.TextSize = size or 9; l.Font = Enum.Font.Gotham
     l.TextXAlignment = Enum.TextXAlignment.Left
     l.TextTruncate = Enum.TextTruncate.AtEnd
     l.Parent = mainFrame
     return l
 end
 
-local recordBtn = mkButton("● RECORD 3s  [R]", 10, 32, 128, 22, Color3.fromRGB(150, 60, 60), 11)
-local freezeBtn = mkButton("Freeze  [F2]", 144, 32, 108, 22, Color3.fromRGB(60, 70, 90), 11)
+--================== LEFT COLUMN (PACKET FINDER) ==================
+local recordBtn = mkButton("● RECORD 3s [R]", 8, 28, 114, 20, Color3.fromRGB(150, 60, 60), 9)
+local freezeBtn = mkButton("Freeze [F2]", 126, 28, 114, 20, Color3.fromRGB(60, 70, 90), 9)
 
 local filterBox = Instance.new("TextBox")
-filterBox.Size = UDim2.new(1, -20, 0, 20); filterBox.Position = UDim2.new(0, 10, 0, 58)
+filterBox.Size = UDim2.new(0, 232, 0, 18); filterBox.Position = UDim2.new(0, 8, 0, 51)
 filterBox.BackgroundColor3 = Color3.fromRGB(40, 44, 54)
-filterBox.PlaceholderText = "filter... (type to narrow rows)"
+filterBox.PlaceholderText = "filter rows..."
 filterBox.Text = ""; filterBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-filterBox.TextSize = 11; filterBox.Font = Enum.Font.Gotham
+filterBox.TextSize = 10; filterBox.Font = Enum.Font.Gotham
 filterBox.ClearTextOnFocus = false; filterBox.Parent = mainFrame
-Instance.new("UICorner", filterBox).CornerRadius = UDim.new(0, 5)
+Instance.new("UICorner", filterBox).CornerRadius = UDim.new(0, 4)
 
-local recStatus = mkLabel("idle", 80, 14, Color3.fromRGB(255, 210, 130), 10)
-local capHeader = mkLabel("▼ CAPTURED — new packets", 96, 13, Color3.fromRGB(120, 255, 160), 10)
+local recStatus = mkLabel("idle", 8, 71, 232, 12, Color3.fromRGB(255, 210, 130), 9)
+
+local capHeader = mkLabel("▼ CAPTURED — new packets", 8, 84, 232, 11, Color3.fromRGB(120, 255, 160), 9)
 local capFrame  = Instance.new("ScrollingFrame")
-capFrame.Size = UDim2.new(1, -20, 0, 58); capFrame.Position = UDim2.new(0, 10, 0, 110)
+capFrame.Size = UDim2.new(0, 232, 0, 44); capFrame.Position = UDim2.new(0, 8, 0, 96)
 capFrame.BackgroundColor3 = Color3.fromRGB(14, 18, 16); capFrame.BackgroundTransparency = 0.25
-capFrame.BorderSizePixel = 0; capFrame.ScrollBarThickness = 4
+capFrame.BorderSizePixel = 0; capFrame.ScrollBarThickness = 3
 capFrame.CanvasSize = UDim2.new(0, 0, 0, 0); capFrame.Parent = mainFrame
-Instance.new("UICorner", capFrame).CornerRadius = UDim.new(0, 6)
+Instance.new("UICorner", capFrame).CornerRadius = UDim.new(0, 5)
 
-local actHeader = mkLabel("▼ ACTIVITY — all packets (noise muted)", 172, 13,
-    Color3.fromRGB(150, 190, 255), 10)
+local actHeader = mkLabel("▼ ACTIVITY — all (noise muted)", 8, 142, 232, 11, Color3.fromRGB(150, 190, 255), 9)
 local actFrame  = Instance.new("ScrollingFrame")
-actFrame.Size = UDim2.new(1, -20, 0, 74); actFrame.Position = UDim2.new(0, 10, 0, 186)
+actFrame.Size = UDim2.new(0, 232, 0, 48); actFrame.Position = UDim2.new(0, 8, 0, 154)
 actFrame.BackgroundColor3 = Color3.fromRGB(14, 16, 22); actFrame.BackgroundTransparency = 0.25
-actFrame.BorderSizePixel = 0; actFrame.ScrollBarThickness = 4
+actFrame.BorderSizePixel = 0; actFrame.ScrollBarThickness = 3
 actFrame.CanvasSize = UDim2.new(0, 0, 0, 0); actFrame.Parent = mainFrame
-Instance.new("UICorner", actFrame).CornerRadius = UDim.new(0, 6)
+Instance.new("UICorner", actFrame).CornerRadius = UDim.new(0, 5)
 
-local slotALbl = mkLabel("Slot A: empty", 264, 13, Color3.fromRGB(255, 200, 120), 10)
-local slotBLbl = mkLabel("Slot B: empty", 277, 13, Color3.fromRGB(150, 220, 255), 10)
-local swapBtn  = mkButton("Active Slot: A  [H]", 10, 292, 242, 18, Color3.fromRGB(70, 70, 90), 10)
+--================== RIGHT COLUMN (SLOTS & ACTIONS) ==================
+local slotALbl = mkLabel("Slot A: empty", 250, 28, 242, 12, Color3.fromRGB(255, 200, 120), 9)
+local slotBLbl = mkLabel("Slot B: empty", 250, 41, 242, 12, Color3.fromRGB(150, 220, 255), 9)
 
+local swapBtn = mkButton("Active Slot: A [H]", 250, 55, 118, 18, Color3.fromRGB(70, 70, 90), 9)
+local grabBtn = mkButton("Grab newest [G]", 374, 55, 118, 18, Color3.fromRGB(70, 70, 95), 9)
+
+-- Inputs row
+local countLbl = mkLabel("N:", 250, 76, 12, 18, nil, 9)
 local countBox = Instance.new("TextBox")
-countBox.Size = UDim2.new(0, 40, 0, 18); countBox.Position = UDim2.new(0, 28, 0, 314)
+countBox.Size = UDim2.new(0, 36, 0, 18); countBox.Position = UDim2.new(0, 264, 0, 76)
 countBox.BackgroundColor3 = Color3.fromRGB(40, 44, 54); countBox.Text = tostring(spawnCount)
-countBox.TextColor3 = Color3.fromRGB(255, 255, 255); countBox.TextSize = 11
+countBox.TextColor3 = Color3.fromRGB(255, 255, 255); countBox.TextSize = 10
 countBox.Font = Enum.Font.Gotham; countBox.ClearTextOnFocus = false; countBox.Parent = mainFrame
-Instance.new("UICorner", countBox).CornerRadius = UDim.new(0, 5)
-local countLbl = mkLabel("N:", 314, 18); countLbl.Size = UDim2.new(0, 16, 0, 18)
+Instance.new("UICorner", countBox).CornerRadius = UDim.new(0, 4)
 
+local radiusLbl = mkLabel("r:", 306, 76, 10, 18, nil, 9)
 local radiusBox = Instance.new("TextBox")
-radiusBox.Size = UDim2.new(0, 40, 0, 18); radiusBox.Position = UDim2.new(0, 138, 0, 314)
+radiusBox.Size = UDim2.new(0, 36, 0, 18); radiusBox.Position = UDim2.new(0, 318, 0, 76)
 radiusBox.BackgroundColor3 = Color3.fromRGB(40, 44, 54); radiusBox.Text = tostring(radius)
-radiusBox.TextColor3 = Color3.fromRGB(255, 255, 255); radiusBox.TextSize = 11
+radiusBox.TextColor3 = Color3.fromRGB(255, 255, 255); radiusBox.TextSize = 10
 radiusBox.Font = Enum.Font.Gotham; radiusBox.ClearTextOnFocus = false; radiusBox.Parent = mainFrame
-Instance.new("UICorner", radiusBox).CornerRadius = UDim.new(0, 5)
-local radiusLbl = mkLabel("scatter r:", 314, 18); radiusLbl.Size = UDim2.new(0, 56, 0, 18)
-radiusLbl.Position = UDim2.new(0, 82, 0, 314)
+Instance.new("UICorner", radiusBox).CornerRadius = UDim.new(0, 4)
 
-local grabBtn    = mkButton("Grab newest → Slot  [G]", 10, 336, 242, 20, Color3.fromRGB(70, 70, 95))
-local burstBtn   = mkButton("FLOOD SLOT A  [B]", 10, 360, 242, 28, Color3.fromRGB(55, 160, 90), 13)
-local scatterBtn = mkButton("Scatter Slot B  [V]", 10, 392, 242, 20, Color3.fromRGB(50, 105, 160))
-local autoPlaceBtn = mkButton("Auto-Place: OFF  [N]", 10, 416, 118, 16, Color3.fromRGB(85, 55, 85), 10)
-local muteBtn      = mkButton("MuteNoise: ON  [U]", 134, 416, 118, 16, Color3.fromRGB(55, 95, 65), 10)
+local muteBtn = mkButton("MuteNoise: ON [U]", 360, 76, 132, 18, Color3.fromRGB(55, 95, 65), 9)
 
+-- Actions
+local burstBtn   = mkButton("FLOOD SLOT A  [B]", 250, 98, 242, 28, Color3.fromRGB(55, 160, 90), 11)
+local scatterBtn = mkButton("Scatter Slot B  [V]", 250, 130, 242, 20, Color3.fromRGB(50, 105, 160), 9)
+local autoPlaceBtn = mkButton("Auto-Place: OFF  [N]", 250, 154, 242, 18, Color3.fromRGB(85, 55, 85), 9)
+
+-- Minimize toggle button
 local restoreBtn = Instance.new("TextButton")
-restoreBtn.Size = UDim2.new(0, 40, 0, 40); restoreBtn.Position = mainFrame.Position
+restoreBtn.Size = UDim2.new(0, 36, 0, 36); restoreBtn.Position = mainFrame.Position
 restoreBtn.BackgroundColor3 = Color3.fromRGB(22, 24, 30); restoreBtn.Text = "D3"
-restoreBtn.TextColor3 = Color3.fromRGB(255, 255, 255); restoreBtn.TextSize = 14
+restoreBtn.TextColor3 = Color3.fromRGB(255, 255, 255); restoreBtn.TextSize = 13
 restoreBtn.Font = Enum.Font.GothamBold; restoreBtn.Visible = false; restoreBtn.Parent = screenGui
-Instance.new("UICorner", restoreBtn).CornerRadius = UDim.new(0, 10)
+Instance.new("UICorner", restoreBtn).CornerRadius = UDim.new(0, 8)
 local restoreWasDragged = makeDraggable(restoreBtn, restoreBtn)
 
 minimizeBtn.MouseButton1Click:Connect(function()
@@ -378,13 +371,13 @@ local function renderInto(frame, list, isCaptured)
     for _, e in ipairs(list) do
         if matches(e) then
             local b = Instance.new("TextButton")
-            b.Size = UDim2.new(1, -6, 0, 15); b.Position = UDim2.new(0, 2, 0, y)
+            b.Size = UDim2.new(1, -4, 0, 14); b.Position = UDim2.new(0, 2, 0, y)
             b.BackgroundColor3 = isCaptured and Color3.fromRGB(30, 60, 40)
                                               or Color3.fromRGB(36, 40, 50)
             b.BackgroundTransparency = 0.25
             b.TextColor3 = isCaptured and Color3.fromRGB(150, 255, 175)
                                          or Color3.fromRGB(165, 200, 250)
-            b.TextSize = 9; b.Font = Enum.Font.Code
+            b.TextSize = 8; b.Font = Enum.Font.Code
             b.TextXAlignment = Enum.TextXAlignment.Left
             b.TextTruncate = Enum.TextTruncate.AtEnd
             b.Text = (isCaptured and "[NEW] " or "")
@@ -393,7 +386,7 @@ local function renderInto(frame, list, isCaptured)
                     or (e.rate and string.format("  %.0f/s", e.rate) or ""))
             b.Parent = frame
             b.MouseButton1Click:Connect(function() grabEntry(e) end)
-            y += 16
+            y += 15
             if y > 400 then break end
         end
     end
@@ -410,8 +403,6 @@ local function sortByRecency(t)
 end
 
 local function rebuild()
-    local capList = {}
-    for _, e in ipairs(activityList) do end -- keep order stable
     local cap = {}
     for _, e in pairs(captured) do cap[#cap + 1] = e end
     renderInto(capFrame, sortByRecency(cap), true)
@@ -507,7 +498,7 @@ local function startRecord()
         task.wait(BASELINE_SECONDS)
         if not running then return end
         recording = "capture"
-        recStatus.Text = "● RECORDING — do the action NOW"
+        recStatus.Text = "● RECORDING — do action NOW"
         recStatus.TextColor3 = Color3.fromRGB(255, 90, 90)
         task.wait(RECORD_SECONDS)
         recording = nil
@@ -515,9 +506,9 @@ local function startRecord()
         local n = 0
         for _ in pairs(captured) do n += 1 end
         if n == 0 then
-            flash("No new packets — repeat the action, or press R again")
+            flash("No new packets — retry or press R")
         else
-            flash("Captured " .. n .. " new packet type(s) — click one")
+            flash("Captured " .. n .. " packet type(s)")
         end
         rebuild()
     end)
@@ -530,12 +521,12 @@ recordBtn.MouseButton1Click:Connect(startRecord)
 freezeBtn.MouseButton1Click:Connect(function()
     frozen = not frozen
     freezeBtn.BackgroundColor3 = frozen and Color3.fromRGB(150, 110, 40) or Color3.fromRGB(60, 70, 90)
-    freezeBtn.Text = frozen and "FROZEN  [F2]" or "Freeze  [F2]"
+    freezeBtn.Text = frozen and "FROZEN [F2]" or "Freeze [F2]"
     if not frozen then rebuild() end
 end)
 swapBtn.MouseButton1Click:Connect(function()
     activeSlot = (activeSlot == "A") and "B" or "A"
-    swapBtn.Text = "Active Slot: " .. activeSlot .. "  [H]"
+    swapBtn.Text = "Active Slot: " .. activeSlot .. " [H]"
 end)
 grabBtn.MouseButton1Click:Connect(function()
     local best, bt
@@ -553,12 +544,12 @@ burstBtn.MouseButton1Click:Connect(doFlood)
 scatterBtn.MouseButton1Click:Connect(function() burst("B", spawnCount, true, true) end)
 autoPlaceBtn.MouseButton1Click:Connect(function()
     autoPlace = not autoPlace
-    autoPlaceBtn.Text = "Auto-Place: " .. (autoPlace and "ON" or "OFF") .. "  [N]"
+    autoPlaceBtn.Text = "Auto-Place: " .. (autoPlace and "ON" or "OFF") .. " [N]"
     autoPlaceBtn.BackgroundColor3 = autoPlace and Color3.fromRGB(55, 130, 85) or Color3.fromRGB(85, 55, 85)
 end)
 muteBtn.MouseButton1Click:Connect(function()
     autoMute = not autoMute
-    muteBtn.Text = "MuteNoise: " .. (autoMute and "ON" or "OFF") .. "  [U]"
+    muteBtn.Text = "MuteNoise: " .. (autoMute and "ON" or "OFF") .. " [U]"
     muteBtn.BackgroundColor3 = autoMute and Color3.fromRGB(55, 95, 65) or Color3.fromRGB(95, 65, 65)
     rebuild()
 end)
@@ -584,22 +575,22 @@ track(UIS.InputBegan:Connect(function(input, gp)
     elseif k == Enum.KeyCode.F2 then
         frozen = not frozen
         freezeBtn.BackgroundColor3 = frozen and Color3.fromRGB(150, 110, 40) or Color3.fromRGB(60, 70, 90)
-        freezeBtn.Text = frozen and "FROZEN  [F2]" or "Freeze  [F2]"
+        freezeBtn.Text = frozen and "FROZEN [F2]" or "Freeze [F2]"
         if not frozen then rebuild() end
     elseif k == Enum.KeyCode.U then
         autoMute = not autoMute
-        muteBtn.Text = "MuteNoise: " .. (autoMute and "ON" or "OFF") .. "  [U]"
+        muteBtn.Text = "MuteNoise: " .. (autoMute and "ON" or "OFF") .. " [U]"
         rebuild()
     elseif k == Enum.KeyCode.G then
-        grabBtn.MouseButton1Click:Fire() -- reuse logic
+        grabBtn.MouseButton1Click:Fire()
     elseif k == Enum.KeyCode.H then
         activeSlot = (activeSlot == "A") and "B" or "A"
-        swapBtn.Text = "Active Slot: " .. activeSlot .. "  [H]"
+        swapBtn.Text = "Active Slot: " .. activeSlot .. " [H]"
     elseif k == Enum.KeyCode.B then doFlood()
     elseif k == Enum.KeyCode.V then burst("B", spawnCount, true, true)
     elseif k == Enum.KeyCode.N then
         autoPlace = not autoPlace
-        autoPlaceBtn.Text = "Auto-Place: " .. (autoPlace and "ON" or "OFF") .. "  [N]"
+        autoPlaceBtn.Text = "Auto-Place: " .. (autoPlace and "ON" or "OFF") .. " [N]"
     elseif k == Enum.KeyCode.M then
         burstMode = (burstMode == "burst") and "spread" or "burst"
     elseif k == Enum.KeyCode.P then
@@ -614,7 +605,7 @@ track(UIS.InputBegan:Connect(function(input, gp)
 end))
 
 --=============================================================================
--- LIVE LOOP (rate calc + throttled redraw)
+-- LIVE LOOP
 --=============================================================================
 task.spawn(function()
     local last = os.clock()
@@ -633,7 +624,7 @@ task.spawn(function()
         if not flashMsg then
             recStatus.Text = recording == "capture" and "● RECORDING"
                 or recording == "baseline" and "sampling..."
-                or (frozen and "frozen — click a row to grab" or "idle · press [R]")
+                or (frozen and "frozen — tap row to grab" or "idle · tap [R]")
             recStatus.TextColor3 = recording and Color3.fromRGB(255, 120, 120)
                 or Color3.fromRGB(150, 160, 175)
         end
