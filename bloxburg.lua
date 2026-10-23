@@ -1,5 +1,5 @@
 --=============================================================================
---  BLOXBURG DUPE  v3  ·  PACKET FINDER + REMOTE REPLAY (MOBILE HORIZONTAL UI)
+--  BLOXBURG DUPE  v3.1  ·  PACKET FINDER + REMOTE REPLAY (MOBILE HORIZONTAL UI)
 --=============================================================================
 
 if getgenv().BDupeV3_Cleanup then getgenv().BDupeV3_Cleanup() end
@@ -8,6 +8,7 @@ local function track(c) table.insert(getgenv().BDupeV3_Conn, c) return c end
 
 local Players = game:GetService("Players")
 local UIS     = game:GetService("UserInputService")
+local RS      = game:GetService("ReplicatedStorage")
 local player  = Players.LocalPlayer
 
 local unpack            = table.unpack or unpack
@@ -98,6 +99,11 @@ local function signature(remote, args)
     return table.concat(parts, "|")
 end
 
+local function isRemoteInstance(self)
+    local cn = typeof(self) == "Instance" and self.ClassName or nil
+    return cn == "RemoteEvent" or cn == "RemoteFunction" or cn == "UnreliableRemoteEvent"
+end
+
 --=============================================================================
 -- RECORDER
 --=============================================================================
@@ -130,27 +136,60 @@ local function recordFire(remote, args)
 end
 
 --=============================================================================
--- NAMECALL HOOK
+-- NAMECALL HOOK (hookmetamethod first, raw-metatable fallback)
 --=============================================================================
-local hookOK, hookedMT, hookedOld = pcall(function()
-    local mt  = getrawmetatable(game)
-    local old = mt.__namecall
-    setreadonly(mt, false)
-    mt.__namecall = newcclosure(function(self, ...)
+local hookMode, hookRestore
+local spyLabel   -- forward declaration; assigned in UI section
+
+local function setSpyStatus(text, color)
+    if spyLabel then
+        spyLabel.Text = text
+        spyLabel.TextColor3 = color
+    end
+end
+
+-- preferred path: hookmetamethod
+pcall(function()
+    if type(hookmetamethod) ~= "function" then error("no hookmetamethod") end
+    local old
+    old = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
         local m = getnamecallmethod()
-        if spyEnabled and not suppress and (m == "FireServer" or m == "InvokeServer") then
-            if typeof(self) == "Instance" and self.ClassName
-                and (self.ClassName == "RemoteEvent"
-                  or self.ClassName == "RemoteFunction"
-                  or self.ClassName == "UnreliableRemoteEvent") then
-                recordFire(self, { ... })
-            end
+        if (m == "FireServer" or m == "InvokeServer")
+            and spyEnabled and not suppress and isRemoteInstance(self) then
+            recordFire(self, { ... })
         end
         return old(self, ...)
-    end)
-    setreadonly(mt, true)
-    return mt, old
+    end))
+    hookMode = "hookmetamethod"
+    hookRestore = function()
+        pcall(function() hookmetamethod(game, "__namecall", old) end)
+    end
 end)
+
+-- fallback: manual raw-metatable write
+if not hookMode then
+    pcall(function()
+        local mt  = getrawmetatable(game)
+        local old = mt.__namecall
+        if type(old) ~= "function" then error("no original __namecall") end
+        setreadonly(mt, false)
+        mt.__namecall = newcclosure(function(self, ...)
+            local m = getnamecallmethod()
+            if (m == "FireServer" or m == "InvokeServer")
+                and spyEnabled and not suppress and isRemoteInstance(self) then
+                recordFire(self, { ... })
+            end
+            return old(self, ...)
+        end)
+        pcall(function() setreadonly(mt, true) end)
+        hookMode = "manual"
+        hookRestore = function()
+            pcall(function()
+                setreadonly(mt, false); mt.__namecall = old; setreadonly(mt, true)
+            end)
+        end
+    end)
+end
 
 --=============================================================================
 -- UI (HORIZONTAL / MOBILE-OPTIMIZED)
@@ -166,7 +205,6 @@ screenGui.Name = "BDupeV3UI"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = uiParent
 
--- Dimensions: 500w x 206h (fits landscape screens easily)
 local mainFrame = Instance.new("Frame")
 mainFrame.Size = UDim2.new(0, 500, 0, 206)
 mainFrame.Position = UDim2.new(0.5, -250, 0.5, -103)
@@ -183,14 +221,26 @@ dragBar.Parent = mainFrame
 Instance.new("UICorner", dragBar).CornerRadius = UDim.new(0, 8)
 
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -40, 1, 0)
+title.Size = UDim2.new(1, -200, 1, 0)
 title.Position = UDim2.new(0, 10, 0, 0)
 title.BackgroundTransparency = 1
-title.Text = "Bloxburg Dupe v3 · PACKET FINDER"
+title.Text = "Bloxburg Dupe v3.1 · PACKET FINDER"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 11; title.Font = Enum.Font.GothamBold
 title.TextXAlignment = Enum.TextXAlignment.Left
 title.Parent = dragBar
+
+-- spy status label (top-right of the drag bar)
+spyLabel = Instance.new("TextLabel")
+spyLabel.Size = UDim2.new(0, 150, 0, 14)
+spyLabel.Position = UDim2.new(1, -180, 0, 5)
+spyLabel.BackgroundTransparency = 1
+spyLabel.Text = "hook: " .. (hookMode or "FAILED")
+spyLabel.TextColor3 = hookMode and Color3.fromRGB(190, 195, 205) or Color3.fromRGB(255, 90, 90)
+spyLabel.TextSize = 8; spyLabel.Font = Enum.Font.GothamBold
+spyLabel.TextXAlignment = Enum.TextXAlignment.Right
+spyLabel.TextTruncate = Enum.TextTruncate.AtEnd
+spyLabel.Parent = dragBar
 
 local minimizeBtn = Instance.new("TextButton")
 minimizeBtn.Size = UDim2.new(0, 20, 0, 18)
@@ -354,6 +404,7 @@ end
 -- ROW RENDERING
 --=============================================================================
 local grabEntry
+local doGrab
 
 local function matches(e)
     if filterText ~= "" then
@@ -427,11 +478,27 @@ grabEntry = function(e)
     flash("Grabbed " .. e.remote.Name .. " → Slot " .. activeSlot)
 end
 
+doGrab = function()
+    local best, bt
+    for _, e in pairs(captured) do
+        if not bt or (e.t or 0) > bt then best, bt = e, e.t or 0 end
+    end
+    if not best then
+        for _, e in ipairs(activityList) do
+            if not bt or (e.lastT or 0) > bt then best, bt = e, e.lastT or 0 end
+        end
+    end
+    if best then grabEntry(best) else flash("Nothing to grab yet") end
+end
+
 local function callRemote(s, args)
     suppress = true
-    if s.isFunc then s.remote:InvokeServer(unpack(args))
-    else s.remote:FireServer(unpack(args)) end
+    local ok, err = pcall(function()
+        if s.isFunc then s.remote:InvokeServer(unpack(args))
+        else s.remote:FireServer(unpack(args)) end
+    end)
     suppress = false
+    if not ok then flash("replay error: " .. tostring(err)) end
 end
 
 local function jitter(args)
@@ -528,18 +595,7 @@ swapBtn.MouseButton1Click:Connect(function()
     activeSlot = (activeSlot == "A") and "B" or "A"
     swapBtn.Text = "Active Slot: " .. activeSlot .. " [H]"
 end)
-grabBtn.MouseButton1Click:Connect(function()
-    local best, bt
-    for _, e in pairs(captured) do
-        if not bt or (e.t or 0) > bt then best, bt = e, e.t or 0 end
-    end
-    if not best then
-        for _, e in ipairs(activityList) do
-            if not bt or (e.lastT or 0) > bt then best, bt = e, e.lastT or 0 end
-        end
-    end
-    if best then grabEntry(best) else flash("Nothing to grab yet") end
-end)
+grabBtn.MouseButton1Click:Connect(function() doGrab() end)
 burstBtn.MouseButton1Click:Connect(doFlood)
 scatterBtn.MouseButton1Click:Connect(function() burst("B", spawnCount, true, true) end)
 autoPlaceBtn.MouseButton1Click:Connect(function()
@@ -581,8 +637,7 @@ track(UIS.InputBegan:Connect(function(input, gp)
         autoMute = not autoMute
         muteBtn.Text = "MuteNoise: " .. (autoMute and "ON" or "OFF") .. " [U]"
         rebuild()
-    elseif k == Enum.KeyCode.G then
-        grabBtn.MouseButton1Click:Fire()
+    elseif k == Enum.KeyCode.G then doGrab()
     elseif k == Enum.KeyCode.H then
         activeSlot = (activeSlot == "A") and "B" or "A"
         swapBtn.Text = "Active Slot: " .. activeSlot .. " [H]"
@@ -634,6 +689,37 @@ task.spawn(function()
 end)
 
 --=============================================================================
+-- SELF-TEST: local-only probe remote to prove the spy is intercepting
+--=============================================================================
+task.delay(0.6, function()
+    if not running then return end
+    if not hookMode then
+        setSpyStatus("SPY DEAD: no hook support", Color3.fromRGB(255, 90, 90))
+        return
+    end
+    local probe = Instance.new("RemoteEvent")
+    probe.Name = "BDupeProbe"
+    probe.Parent = RS      -- client-side only; never replicates to server
+    pcall(function() probe:FireServer("probe") end)
+    task.delay(0.25, function()
+        local sig = "BDupeProbe|s:probe"
+        if activity[sig] then
+            setSpyStatus("SPY OK (" .. hookMode .. ")", Color3.fromRGB(120, 255, 160))
+            -- scrub the probe from every store so [G] can't pick it up
+            activity[sig] = nil
+            captured[sig] = nil
+            for i = #activityList, 1, -1 do
+                if activityList[i].sig == sig then table.remove(activityList, i) end
+            end
+            rebuild()
+        else
+            setSpyStatus("SPY DEAD: hook not firing", Color3.fromRGB(255, 90, 90))
+        end
+        if probe then probe:Destroy() end
+    end)
+end)
+
+--=============================================================================
 -- CLEANUP
 --=============================================================================
 getgenv().BDupeV3_Cleanup = function()
@@ -642,11 +728,7 @@ getgenv().BDupeV3_Cleanup = function()
         if typeof(c) == "RBXScriptConnection" then c:Disconnect() end
     end
     table.clear(getgenv().BDupeV3_Conn)
-    if hookOK and hookedMT and hookedOld then
-        pcall(function()
-            setreadonly(hookedMT, false); hookedMT.__namecall = hookedOld; setreadonly(hookedMT, true)
-        end)
-    end
+    if hookRestore then pcall(hookRestore) end
     if screenGui then screenGui:Destroy() end
     getgenv().BDupeV3_Cleanup = nil
 end
