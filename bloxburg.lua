@@ -1,10 +1,12 @@
 --=============================================================================
---  WELCOME TO BLOXBURG · SERVER-SIDE ITEM DUPLICATOR (v2.1 — MOBILE & FILTER)
+--  WELCOME TO BLOXBURG · SERVER-SIDE ITEM DUPLICATOR (v2.2 — YIELD-SAFE)
 --=============================================================================
---  - Horizontal/landscape UI layout optimized for mobile screens.
---  - Packet blacklist & noise filter to eliminate background core/chat spam.
---  - Spy toggle actually gates the namecall hook.
---  - Logs detect and display Bloxburg's first-argument RPC actions.
+--  - Fix: hook body wrapped in pcall so logging errors never block the
+--    original FireServer / InvokeServer call. This restores placement,
+--    taking items, and fridge interactions while spy is ON.
+--  - Fix: callRemote uses pcall so the `suppress` flag can never get stuck.
+--  - Fix: service lookup cached outside shouldIgnore.
+--  - Everything else preserved.
 --=============================================================================
 
 if getgenv().BloxburgDupeV2_Cleanup then getgenv().BloxburgDupeV2_Cleanup() end
@@ -27,44 +29,40 @@ local getnamecallmethod = getnamecallmethod or function() return nil end
 local spawnCount = 25
 local radius     = 40
 local activeSlot = "A"
-local spyEnabled = false  -- Default OFF to keep logs completely clean until ready
+local spyEnabled = false
 local autoPlace  = false
-local burstMode  = "burst" -- "burst" | "spread"
+local burstMode  = "burst"
 local SPREAD_GAP = 0.03
 local LOG_MAX    = 40
 local running    = true
 local plotCenter = nil
 
 -- packet noise filter -------------------------------------------------------
+local RobloxReplicatedStorage = game:GetService("RobloxReplicatedStorage")
+
 local IGNORED_REMOTES = {
-    ["SayMessageRequest"]          = true,
+    ["SayMessageRequest"]           = true,
     ["DefaultChatSystemChatEvents"] = true,
-    ["OnNewMessage"]               = true,
-    ["OnMessageDoneFiltering"]     = true,
-    ["ChatScript"]                 = true,
-    ["UpdatePlayerBlockList"]      = true,
-    ["SetDialogInUse"]             = true,
-    ["ClientDataUpdate"]           = true,
-    ["GetServerVersion"]           = true,
-    ["CharacterLoaded"]            = true,
-    ["TouchRemote"]                = true,
+    ["OnNewMessage"]                = true,
+    ["OnMessageDoneFiltering"]      = true,
+    ["ChatScript"]                  = true,
+    ["UpdatePlayerBlockList"]       = true,
+    ["SetDialogInUse"]              = true,
+    ["ClientDataUpdate"]            = true,
+    ["GetServerVersion"]            = true,
+    ["CharacterLoaded"]             = true,
+    ["TouchRemote"]                 = true,
 }
 
 local function shouldIgnore(remote, args)
     local name = remote.Name
     if IGNORED_REMOTES[name] then return true end
-
-    -- Core engine & chat network instances
-    if remote:IsDescendantOf(game:GetService("RobloxReplicatedStorage")) then
-        return true
-    end
-
-    -- Filter periodic telemetry, sound, and ping events
+    if remote:IsDescendantOf(RobloxReplicatedStorage) then return true end
     local lower = name:lower()
-    if lower:find("ping") or lower:find("heartbeat") or lower:find("analytics") or lower:find("sound") then
+    if lower:find("ping") or lower:find("heartbeat")
+        or lower:find("analytics") or lower:find("sound") then
         return true
     end
-
     return false
 end
 
@@ -125,7 +123,7 @@ local function argString(args)
 end
 
 --=============================================================================
--- PACKET RECORDER
+-- PACKET RECORDER  (kept 100% side-effect free on failure thanks to pcall)
 --=============================================================================
 local function recordFire(remote, args)
     fireTotal += 1
@@ -159,7 +157,7 @@ local function recordFire(remote, args)
 end
 
 --=============================================================================
--- HOOK (With Spy Check & Ignored Remotes Filter)
+-- HOOK  —  YIELD-SAFE + ERROR-SAFE
 --=============================================================================
 local hookInstalled = false
 local hookedMT, hookedOld
@@ -170,22 +168,42 @@ hookInstalled = pcall(function()
     hookedMT, hookedOld = mt, old
 
     setreadonly(mt, false)
+
     mt.__namecall = newcclosure(function(self, ...)
         local method = getnamecallmethod()
-        if spyEnabled and not suppress and (method == "FireServer" or method == "InvokeServer") then
-            if typeof(self) == "Instance" and self.ClassName ~= nil
-                and (self.ClassName == "RemoteEvent"
-                  or self.ClassName == "RemoteFunction"
-                  or self.ClassName == "UnreliableRemoteEvent") then
-                
-                local args = { ... }
-                if not shouldIgnore(self, args) then
-                    recordFire(self, args)
-                end
-            end
+
+        -- FAST PATH: spy off, suppressed, or irrelevant method → call original
+        -- directly. This is the common case and must be as cheap as possible.
+        if not spyEnabled or suppress
+            or (method ~= "FireServer" and method ~= "InvokeServer") then
+            return old(self, ...)
         end
+
+        -- SLOW PATH: attempt to log.  ANY failure here is swallowed so that
+        -- the original remote call below ALWAYS executes.  This is what
+        -- previously caused placement / take / fridge interactions to hang
+        -- and the character's hand animation to glitch out.
+        pcall(function()
+            if typeof(self) ~= "Instance" then return end
+            local cn = self.ClassName
+            if cn ~= "RemoteEvent"
+                and cn ~= "RemoteFunction"
+                and cn ~= "UnreliableRemoteEvent" then
+                return
+            end
+            local args = { ... }
+            if not shouldIgnore(self, args) then
+                recordFire(self, args)
+            end
+        end)
+
+        -- Yield-safe: for InvokeServer this MUST be allowed to yield.  Modern
+        -- executors (Synapse, Script-Ware, Wave, …) provide a yield-safe
+        -- newcclosure.  If yours does not, InvokeServer spying must instead
+        -- be done via hookfunction on the specific RemoteFunction.
         return old(self, ...)
     end)
+
     setreadonly(mt, true)
 end)
 
@@ -205,7 +223,6 @@ screenGui.Name = "ItemDupeV2UI"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = uiParent
 
--- Dimensions: 460 x 220 fits landscape mobile phones without vertical clipping
 local mainFrame = Instance.new("Frame")
 mainFrame.Size = UDim2.new(0, 460, 0, 220)
 mainFrame.Position = UDim2.new(0.5, -230, 0.5, -110)
@@ -225,7 +242,7 @@ local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -35, 1, 0)
 title.Position = UDim2.new(0, 10, 0, 0)
 title.BackgroundTransparency = 1
-title.Text = "Bloxburg Dupe v2.1 (Horizontal)"
+title.Text = "Bloxburg Dupe v2.2 (Yield-Safe)"
 title.TextColor3 = Color3.fromRGB(240, 240, 240)
 title.TextSize = 11
 title.Font = Enum.Font.GothamBold
@@ -244,7 +261,6 @@ minimizeBtn.ZIndex = 2
 minimizeBtn.Parent = dragBar
 Instance.new("UICorner", minimizeBtn).CornerRadius = UDim.new(0, 5)
 
--- Touch & mouse drag support
 local function makeDraggable(handle, target)
     local dragging, dragInput, dragStart, startPos = false, nil, nil, nil
     local moved = false
@@ -285,22 +301,18 @@ end
 
 makeDraggable(dragBar, mainFrame)
 
--- UI Column Division --------------------------------------------------------
--- Left Column: Controls (Width: 215)
 local leftCol = Instance.new("Frame")
 leftCol.Size = UDim2.new(0, 215, 1, -32)
 leftCol.Position = UDim2.new(0, 8, 0, 28)
 leftCol.BackgroundTransparency = 1
 leftCol.Parent = mainFrame
 
--- Right Column: Network Log (Width: 220)
 local rightCol = Instance.new("Frame")
 rightCol.Size = UDim2.new(0, 220, 1, -32)
 rightCol.Position = UDim2.new(0, 230, 0, 28)
 rightCol.BackgroundTransparency = 1
 rightCol.Parent = mainFrame
 
--- UI Helpers
 local function createLabel(parent, text, x, y, w, h, color, size)
     local l = Instance.new("TextLabel")
     l.Size = UDim2.new(0, w, 0, h)
@@ -330,16 +342,13 @@ local function createButton(parent, text, x, y, w, h, color, size)
     return b
 end
 
--- Left Column Content -------------------------------------------------------
 local topStatusLbl = createLabel(leftCol, "Status: Ready", 0, 0, 215, 14, Color3.fromRGB(140, 150, 165), 10)
 local slotALbl     = createLabel(leftCol, "Slot A: empty", 0, 14, 215, 13, Color3.fromRGB(255, 200, 110), 9)
 local slotBLbl     = createLabel(leftCol, "Slot B: empty", 0, 27, 215, 13, Color3.fromRGB(130, 210, 255), 9)
 
--- Row 1: Spy & Slot Toggle
 local spyBtn      = createButton(leftCol, "Spy: OFF", 0, 44, 104, 22, Color3.fromRGB(110, 50, 50))
 local slotSwapBtn = createButton(leftCol, "Slot: A", 110, 44, 105, 22, Color3.fromRGB(60, 65, 80))
 
--- Row 2: Inputs (Count & Scatter Radius)
 createLabel(leftCol, "N:", 0, 72, 16, 18)
 local countBox = Instance.new("TextBox")
 countBox.Size = UDim2.new(0, 36, 0, 18)
@@ -368,16 +377,13 @@ Instance.new("UICorner", radiusBox).CornerRadius = UDim.new(0, 4)
 
 local grabBtn = createButton(leftCol, "Grab Last", 132, 72, 83, 18, Color3.fromRGB(70, 75, 95))
 
--- Row 3: Actions
 local burstBtn   = createButton(leftCol, "FLOOD (A)", 0, 96, 104, 26, Color3.fromRGB(50, 150, 80), 11)
 local scatterBtn = createButton(leftCol, "Scatter (B)", 110, 96, 105, 26, Color3.fromRGB(45, 100, 150), 11)
 
--- Row 4: Secondary Options
 local autoPlaceBtn = createButton(leftCol, "Auto-Place: OFF", 0, 128, 104, 20, Color3.fromRGB(80, 50, 80), 9)
 local modeBtn      = createButton(leftCol, "Mode: BURST", 110, 128, 105, 20, Color3.fromRGB(70, 70, 70), 9)
 local originBtn    = createButton(leftCol, "Set Origin Here", 0, 152, 215, 20, Color3.fromRGB(50, 55, 68), 9)
 
--- Right Column Content (Log) ------------------------------------------------
 local logHeader = createLabel(rightCol, "Captured Packets (Tap to select):", 0, 0, 160, 14, Color3.fromRGB(160, 170, 185), 9)
 local clearLogBtn = createButton(rightCol, "Clear", 175, 0, 45, 14, Color3.fromRGB(85, 45, 45), 9)
 
@@ -392,7 +398,6 @@ logFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
 logFrame.Parent = rightCol
 Instance.new("UICorner", logFrame).CornerRadius = UDim.new(0, 5)
 
--- Minimized Pill (for quick restore on mobile)
 local restoreBtn = Instance.new("TextButton")
 restoreBtn.Size = UDim2.new(0, 34, 0, 34)
 restoreBtn.Position = mainFrame.Position
@@ -487,12 +492,17 @@ end
 
 local function callRemote(s, args)
     suppress = true
-    if s.isFunc then
-        s.remote:InvokeServer(unpack(args))
-    else
-        s.remote:FireServer(unpack(args))
-    end
+    local ok, err = pcall(function()
+        if s.isFunc then
+            s.remote:InvokeServer(unpack(args))
+        else
+            s.remote:FireServer(unpack(args))
+        end
+    end)
     suppress = false
+    if not ok then
+        warn("[BloxburgDupe] callRemote failed: " .. tostring(err))
+    end
 end
 
 local function jitter(args)
@@ -612,7 +622,7 @@ radiusBox.FocusLost:Connect(function()
 end)
 
 --=============================================================================
--- KEYBOARD SHORTCUTS (Optional fallback for PC)
+-- KEYBOARD SHORTCUTS
 --=============================================================================
 track(UIS.InputBegan:Connect(function(input, gp)
     if gp then return end
