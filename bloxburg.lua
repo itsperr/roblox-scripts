@@ -1,13 +1,10 @@
 --=============================================================================
---  WELCOME TO BLOXBURG · SERVER-SIDE ITEM DUPLICATOR (v2.1 — MOBILE & FILTER)
---=============================================================================
---  - Horizontal/landscape UI layout optimized for mobile screens.
---  - Packet blacklist & noise filter to eliminate background core/chat spam.
---  - Spy toggle actually gates the namecall hook.
---  - Logs detect and display Bloxburg's first-argument RPC actions.
+-- WELCOME TO BLOXBURG · ITEM RECORDER & SPY (v2.1 — MOBILE & FILTER)
 --=============================================================================
 
-if getgenv().BloxburgDupeV2_Cleanup then getgenv().BloxburgDupeV2_Cleanup() end
+if getgenv().BloxburgDupeV2_Cleanup then
+    pcall(getgenv().BloxburgDupeV2_Cleanup)
+end
 
 getgenv().BloxburgDupeV2_Conn = {}
 local function track(c)
@@ -16,50 +13,50 @@ local function track(c)
 end
 
 local Players = game:GetService("Players")
-local UIS     = game:GetService("UserInputService")
-local player  = Players.LocalPlayer
+local UIS = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+local player = Players.LocalPlayer
 
-local unpack            = table.unpack or unpack
-local newcclosure       = newcclosure or function(f) return f end
+local unpack = table.unpack or unpack
+local newcclosure = newcclosure or function(f) return f end
 local getnamecallmethod = getnamecallmethod or function() return nil end
 
--- settings ------------------------------------------------------------------
+-- Settings
 local spawnCount = 25
-local radius     = 40
+local radius = 40
 local activeSlot = "A"
-local spyEnabled = false  -- Default OFF to keep logs completely clean until ready
-local autoPlace  = false
-local burstMode  = "burst" -- "burst" | "spread"
+local spyEnabled = false
+local autoPlace = false
+local burstMode = "burst"
 local SPREAD_GAP = 0.03
-local LOG_MAX    = 40
-local running    = true
+local LOG_MAX = 40
+local running = true
 local plotCenter = nil
 
--- packet noise filter -------------------------------------------------------
+-- Filter
 local IGNORED_REMOTES = {
-    ["SayMessageRequest"]          = true,
+    ["SayMessageRequest"] = true,
     ["DefaultChatSystemChatEvents"] = true,
-    ["OnNewMessage"]               = true,
-    ["OnMessageDoneFiltering"]     = true,
-    ["ChatScript"]                 = true,
-    ["UpdatePlayerBlockList"]      = true,
-    ["SetDialogInUse"]             = true,
-    ["ClientDataUpdate"]           = true,
-    ["GetServerVersion"]           = true,
-    ["CharacterLoaded"]            = true,
-    ["TouchRemote"]                = true,
+    ["OnNewMessage"] = true,
+    ["OnMessageDoneFiltering"] = true,
+    ["ChatScript"] = true,
+    ["UpdatePlayerBlockList"] = true,
+    ["SetDialogInUse"] = true,
+    ["ClientDataUpdate"] = true,
+    ["GetServerVersion"] = true,
+    ["CharacterLoaded"] = true,
+    ["TouchRemote"] = true,
 }
 
 local function shouldIgnore(remote, args)
     local name = remote.Name
     if IGNORED_REMOTES[name] then return true end
 
-    -- Core engine & chat network instances
-    if remote:IsDescendantOf(game:GetService("RobloxReplicatedStorage")) then
+    local rStorage = game:FindService("RobloxReplicatedStorage")
+    if rStorage and remote:IsDescendantOf(rStorage) then
         return true
     end
 
-    -- Filter periodic telemetry, sound, and ping events
     local lower = name:lower()
     if lower:find("ping") or lower:find("heartbeat") or lower:find("analytics") or lower:find("sound") then
         return true
@@ -68,19 +65,17 @@ local function shouldIgnore(remote, args)
     return false
 end
 
--- state ---------------------------------------------------------------------
-local slots         = { A = nil, B = nil }
-local registry      = {}
+-- State
+local slots = { A = nil, B = nil }
+local registry = {}
 local registryOrder = {}
-local logEntries    = {}
-local logDirty      = false
-local fireTotal     = 0
-local suppress      = false
+local logEntries = {}
+local logDirty = false
+local fireTotal = 0
+local suppress = false
 local flashMsg, flashToken = nil, 0
 
---=============================================================================
--- HELPERS
---=============================================================================
+-- Helpers
 local function deepCopy(v, seen)
     if type(v) ~= "table" then return v end
     seen = seen or {}
@@ -124,9 +119,7 @@ local function argString(args)
     return s
 end
 
---=============================================================================
--- PACKET RECORDER
---=============================================================================
+-- Packet Recorder
 local function recordFire(remote, args)
     fireTotal += 1
 
@@ -144,29 +137,26 @@ local function recordFire(remote, args)
         table.insert(registryOrder, e)
     end
     e.count += 1
-    e.last   = args
-    e.stamp  = os.clock()
+    e.last = args
+    e.stamp = os.clock()
 
     table.insert(logEntries, {
-        remote    = remote,
-        args      = args,
-        desc      = argString(args),
+        remote = remote,
+        args = args,
+        desc = argString(args),
         actionTag = actionTag,
-        n         = fireTotal,
+        n = fireTotal,
     })
     if #logEntries > LOG_MAX then table.remove(logEntries, 1) end
     logDirty = true
 end
 
---=============================================================================
--- HOOK (With Spy Check & Ignored Remotes Filter)
---=============================================================================
+-- Hook Installation
 local hookInstalled = false
 local hookedMT, hookedOld
 
--- Replace the hook section with this:
-hookInstalled = pcall(function()
-    local mt  = getrawmetatable(game)
+pcall(function()
+    local mt = getrawmetatable(game)
     local old = mt.__namecall
     hookedMT, hookedOld = mt, old
 
@@ -174,25 +164,19 @@ hookInstalled = pcall(function()
     mt.__namecall = newcclosure(function(self, ...)
         local method = getnamecallmethod()
         
-        -- Always call original first to ensure game function works
-        -- Then log after if needed
         if spyEnabled and not suppress and method and (method == "FireServer" or method == "InvokeServer") then
             if typeof(self) == "Instance" and self.ClassName ~= nil
                 and (self.ClassName == "RemoteEvent"
                   or self.ClassName == "RemoteFunction"
                   or self.ClassName == "UnreliableRemoteEvent") then
                 
-                -- Wrap logging in pcall so it never breaks the game
+                local args = { ... }
                 task.spawn(function()
-                    local args = { ... }
-                    local success, err = pcall(function()
+                    pcall(function()
                         if not shouldIgnore(self, args) then
                             recordFire(self, args)
                         end
                     end)
-                    if not success then
-                        warn("BloxburgDupe Spy Error: " .. tostring(err))
-                    end
                 end)
             end
         end
@@ -200,25 +184,41 @@ hookInstalled = pcall(function()
         return old(self, ...)
     end)
     setreadonly(mt, true)
+    hookInstalled = true
 end)
 
---=============================================================================
--- HORIZONTAL UI SETUP
---=============================================================================
-local playerGui = player:WaitForChild("PlayerGui")
-local uiParent  = (typeof(gethui) == "function" and gethui()) or playerGui
-
-for _, container in ipairs({ playerGui, uiParent }) do
-    local old = container:FindFirstChild("ItemDupeV2UI")
-    if old then old:Destroy() end
+-- Safe UI Container Resolution
+local function getSafeUIParent()
+    if typeof(gethui) == "function" then
+        local success, res = pcall(gethui)
+        if success and res then return res end
+    end
+    local success, res = pcall(function()
+        return CoreGui
+    end)
+    if success and res then return res end
+    return player:WaitForChild("PlayerGui")
 end
+
+local uiParent = getSafeUIParent()
+
+-- Clean old instances
+pcall(function()
+    for _, container in ipairs({ player:FindFirstChild("PlayerGui"), CoreGui }) do
+        if container then
+            local old = container:FindFirstChild("ItemDupeV2UI")
+            if old then old:Destroy() end
+        end
+    end
+end)
 
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "ItemDupeV2UI"
 screenGui.ResetOnSpawn = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.Parent = uiParent
 
--- Dimensions: 460 x 220 fits landscape mobile phones without vertical clipping
+-- Dimensions: 460 x 220
 local mainFrame = Instance.new("Frame")
 mainFrame.Size = UDim2.new(0, 460, 0, 220)
 mainFrame.Position = UDim2.new(0.5, -230, 0.5, -110)
@@ -249,7 +249,7 @@ local minimizeBtn = Instance.new("TextButton")
 minimizeBtn.Size = UDim2.new(0, 20, 0, 20)
 minimizeBtn.Position = UDim2.new(1, -24, 0, 3)
 minimizeBtn.BackgroundColor3 = Color3.fromRGB(245, 160, 20)
-minimizeBtn.Text = "–"
+minimizeBtn.Text = "-"
 minimizeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 minimizeBtn.TextSize = 14
 minimizeBtn.Font = Enum.Font.GothamBold
@@ -257,7 +257,7 @@ minimizeBtn.ZIndex = 2
 minimizeBtn.Parent = dragBar
 Instance.new("UICorner", minimizeBtn).CornerRadius = UDim.new(0, 5)
 
--- Touch & mouse drag support
+-- Draggable Logic
 local function makeDraggable(handle, target)
     local dragging, dragInput, dragStart, startPos = false, nil, nil, nil
     local moved = false
@@ -267,7 +267,7 @@ local function makeDraggable(handle, target)
             or input.UserInputType == Enum.UserInputType.Touch then
             dragging, moved = true, false
             dragStart = input.Position
-            startPos  = target.Position
+            startPos = target.Position
             track(input.Changed:Connect(function()
                 if input.UserInputState == Enum.UserInputState.End then
                     dragging = false
@@ -298,22 +298,19 @@ end
 
 makeDraggable(dragBar, mainFrame)
 
--- UI Column Division --------------------------------------------------------
--- Left Column: Controls (Width: 215)
+-- Layout Columns
 local leftCol = Instance.new("Frame")
 leftCol.Size = UDim2.new(0, 215, 1, -32)
 leftCol.Position = UDim2.new(0, 8, 0, 28)
 leftCol.BackgroundTransparency = 1
 leftCol.Parent = mainFrame
 
--- Right Column: Network Log (Width: 220)
 local rightCol = Instance.new("Frame")
 rightCol.Size = UDim2.new(0, 220, 1, -32)
 rightCol.Position = UDim2.new(0, 230, 0, 28)
 rightCol.BackgroundTransparency = 1
 rightCol.Parent = mainFrame
 
--- UI Helpers
 local function createLabel(parent, text, x, y, w, h, color, size)
     local l = Instance.new("TextLabel")
     l.Size = UDim2.new(0, w, 0, h)
@@ -343,16 +340,14 @@ local function createButton(parent, text, x, y, w, h, color, size)
     return b
 end
 
--- Left Column Content -------------------------------------------------------
+-- Controls
 local topStatusLbl = createLabel(leftCol, "Status: Ready", 0, 0, 215, 14, Color3.fromRGB(140, 150, 165), 10)
 local slotALbl     = createLabel(leftCol, "Slot A: empty", 0, 14, 215, 13, Color3.fromRGB(255, 200, 110), 9)
 local slotBLbl     = createLabel(leftCol, "Slot B: empty", 0, 27, 215, 13, Color3.fromRGB(130, 210, 255), 9)
 
--- Row 1: Spy & Slot Toggle
 local spyBtn      = createButton(leftCol, "Spy: OFF", 0, 44, 104, 22, Color3.fromRGB(110, 50, 50))
 local slotSwapBtn = createButton(leftCol, "Slot: A", 110, 44, 105, 22, Color3.fromRGB(60, 65, 80))
 
--- Row 2: Inputs (Count & Scatter Radius)
 createLabel(leftCol, "N:", 0, 72, 16, 18)
 local countBox = Instance.new("TextBox")
 countBox.Size = UDim2.new(0, 36, 0, 18)
@@ -381,17 +376,14 @@ Instance.new("UICorner", radiusBox).CornerRadius = UDim.new(0, 4)
 
 local grabBtn = createButton(leftCol, "Grab Last", 132, 72, 83, 18, Color3.fromRGB(70, 75, 95))
 
--- Row 3: Actions
 local burstBtn   = createButton(leftCol, "FLOOD (A)", 0, 96, 104, 26, Color3.fromRGB(50, 150, 80), 11)
 local scatterBtn = createButton(leftCol, "Scatter (B)", 110, 96, 105, 26, Color3.fromRGB(45, 100, 150), 11)
 
--- Row 4: Secondary Options
 local autoPlaceBtn = createButton(leftCol, "Auto-Place: OFF", 0, 128, 104, 20, Color3.fromRGB(80, 50, 80), 9)
 local modeBtn      = createButton(leftCol, "Mode: BURST", 110, 128, 105, 20, Color3.fromRGB(70, 70, 70), 9)
 local originBtn    = createButton(leftCol, "Set Origin Here", 0, 152, 215, 20, Color3.fromRGB(50, 55, 68), 9)
 
--- Right Column Content (Log) ------------------------------------------------
-local logHeader = createLabel(rightCol, "Captured Packets (Tap to select):", 0, 0, 160, 14, Color3.fromRGB(160, 170, 185), 9)
+createLabel(rightCol, "Captured Packets (Tap to select):", 0, 0, 160, 14, Color3.fromRGB(160, 170, 185), 9)
 local clearLogBtn = createButton(rightCol, "Clear", 175, 0, 45, 14, Color3.fromRGB(85, 45, 45), 9)
 
 local logFrame = Instance.new("ScrollingFrame")
@@ -405,7 +397,7 @@ logFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
 logFrame.Parent = rightCol
 Instance.new("UICorner", logFrame).CornerRadius = UDim.new(0, 5)
 
--- Minimized Pill (for quick restore on mobile)
+-- Minimized Bubble
 local restoreBtn = Instance.new("TextButton")
 restoreBtn.Size = UDim2.new(0, 34, 0, 34)
 restoreBtn.Position = mainFrame.Position
@@ -421,17 +413,17 @@ local restoreWasDragged = makeDraggable(restoreBtn, restoreBtn)
 
 minimizeBtn.MouseButton1Click:Connect(function()
     restoreBtn.Position = mainFrame.Position
-    mainFrame.Visible, restoreBtn.Visible = false, true
+    mainFrame.Visible = false
+    restoreBtn.Visible = true
 end)
+
 restoreBtn.MouseButton1Click:Connect(function()
     if restoreWasDragged() then return end
     mainFrame.Position = restoreBtn.Position
-    mainFrame.Visible, restoreBtn.Visible = true, false
+    mainFrame.Visible = true
+    restoreBtn.Visible = false
 end)
 
---=============================================================================
--- STATUS / FLASH
---=============================================================================
 local function flash(msg)
     flashToken += 1
     local my = flashToken
@@ -453,9 +445,6 @@ local function refreshSlots()
 end
 refreshSlots()
 
---=============================================================================
--- LOG RENDERING
---=============================================================================
 local grabEntry
 
 local function renderLog()
@@ -483,16 +472,13 @@ local function renderLog()
     logFrame.CanvasSize = UDim2.new(0, 0, 0, y)
 end
 
---=============================================================================
--- ACTIONS & BURST
---=============================================================================
 grabEntry = function(e)
     slots[activeSlot] = {
-        remote    = e.remote,
-        args      = deepCopy(e.args),
-        name      = e.remote.Name,
+        remote = e.remote,
+        args = deepCopy(e.args),
+        name = e.remote.Name,
         actionTag = e.actionTag,
-        isFunc    = (e.remote.ClassName == "RemoteFunction"),
+        isFunc = (e.remote.ClassName == "RemoteFunction"),
     }
     refreshSlots()
     flash("Grabbed " .. e.remote.Name .. (e.actionTag or "") .. " -> " .. activeSlot)
@@ -501,9 +487,9 @@ end
 local function callRemote(s, args)
     suppress = true
     if s.isFunc then
-        s.remote:InvokeServer(unpack(args))
+        pcall(function() s.remote:InvokeServer(unpack(args)) end)
     else
-        s.remote:FireServer(unpack(args))
+        pcall(function() s.remote:FireServer(unpack(args)) end)
     end
     suppress = false
 end
@@ -520,8 +506,7 @@ local function jitter(args)
                 out[i] = Vector3.new(base.X + math.cos(a) * d, v.Y, base.Z + math.sin(a) * d)
             else
                 local base = plotCenter or v.Position
-                out[i] = CFrame.new(base.X + math.cos(a) * d, v.Position.Y, base.Z + math.sin(a) * d)
-                    * (v - v.Position)
+                out[i] = CFrame.new(base.X + math.cos(a) * d, v.Position.Y, base.Z + math.sin(a) * d) * (v - v.Position)
             end
             done = true
         else
@@ -555,7 +540,7 @@ local function burst(slotId, n, doJitter, spread)
 end
 
 local function doBurstA()
-    if not slots.A then flash("Slot A empty — spy an item take first") return end
+    if not slots.A then flash("Slot A empty — spy an item first") return end
     burst("A", spawnCount, false, burstMode == "spread")
     flash("Sent " .. spawnCount .. "x " .. slots.A.name)
     if autoPlace and slots.B then
@@ -565,14 +550,11 @@ local function doBurstA()
     end
 end
 
---=============================================================================
--- BUTTON CONNECTIONS
---=============================================================================
 spyBtn.MouseButton1Click:Connect(function()
     spyEnabled = not spyEnabled
     spyBtn.Text = "Spy: " .. (spyEnabled and "ON" or "OFF")
     spyBtn.BackgroundColor3 = spyEnabled and Color3.fromRGB(50, 120, 60) or Color3.fromRGB(110, 50, 50)
-    flash(spyEnabled and "Spy Active: Perform action now" or "Spy Paused")
+    flash(spyEnabled and "Spy Active" or "Spy Paused")
 end)
 
 slotSwapBtn.MouseButton1Click:Connect(function()
@@ -624,32 +606,6 @@ radiusBox.FocusLost:Connect(function()
     radiusBox.Text = tostring(radius)
 end)
 
---=============================================================================
--- KEYBOARD SHORTCUTS (Optional fallback for PC)
---=============================================================================
-track(UIS.InputBegan:Connect(function(input, gp)
-    if gp then return end
-    local k = input.KeyCode
-    if k == Enum.KeyCode.F1 then
-        spyEnabled = not spyEnabled
-        spyBtn.Text = "Spy: " .. (spyEnabled and "ON" or "OFF")
-        spyBtn.BackgroundColor3 = spyEnabled and Color3.fromRGB(50, 120, 60) or Color3.fromRGB(110, 50, 50)
-    elseif k == Enum.KeyCode.G then
-        local last = logEntries[#logEntries]
-        if last then grabEntry(last) end
-    elseif k == Enum.KeyCode.H then
-        activeSlot = (activeSlot == "A") and "B" or "A"
-        refreshSlots()
-    elseif k == Enum.KeyCode.B then
-        doBurstA()
-    elseif k == Enum.KeyCode.V then
-        burst("B", spawnCount, true, true)
-    end
-end))
-
---=============================================================================
--- REFRESH LOOP
---=============================================================================
 task.spawn(function()
     while running do
         task.wait(0.25)
@@ -663,9 +619,6 @@ task.spawn(function()
     end
 end)
 
---=============================================================================
--- CLEANUP
---=============================================================================
 getgenv().BloxburgDupeV2_Cleanup = function()
     running = false
     for _, c in ipairs(getgenv().BloxburgDupeV2_Conn) do
