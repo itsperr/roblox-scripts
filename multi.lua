@@ -1,5 +1,5 @@
--- Bloxburg & Universal Toolkit (Landscape Mobile Modal UI)
--- Optimized for Mobile Landscape & Delta Executor
+-- Bloxburg & Universal Toolkit (Landscape Card + Godmode)
+-- Optimized for Delta Executor & Touch / Mouse
 
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
@@ -14,6 +14,7 @@ local noclipEnabled = false
 local espEnabled = false
 local itemEspEnabled = false
 local speedEnabled = false
+local godmodeEnabled = false
 local minimized = false
 
 -- Settings
@@ -25,7 +26,7 @@ local ITEM_ESP_RANGE = 2500
 local ESP_REFRESH = 0.15
 local ITEM_SCAN_INTERVAL = 1.0
 
--- Theme Palette (Inspired by Modern Card UI)
+-- UI Theme
 local THEME = {
     CardBg = Color3.fromRGB(24, 26, 32),
     CardStroke = Color3.fromRGB(45, 48, 58),
@@ -109,7 +110,7 @@ local function makeDraggable(handle, target)
     return function() return moved end
 end
 
--- ========== UI CONSTRUCTION ==========
+-- ========== UI SETUP ==========
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "BT_LandscapeUI"
 screenGui.ResetOnSpawn = false
@@ -133,14 +134,13 @@ cardStroke.Color = THEME.CardStroke
 cardStroke.Thickness = 1.5
 cardStroke.Parent = mainCard
 
--- Top Header Bar
+-- Top Header
 local header = Instance.new("Frame")
 header.Name = "Header"
 header.Size = UDim2.new(1, 0, 0, 42)
 header.BackgroundTransparency = 1
 header.Parent = mainCard
 
--- Close / Minimize Button (✕)
 local closeBtn = Instance.new("TextButton")
 closeBtn.Name = "CloseBtn"
 closeBtn.Size = UDim2.new(0, 32, 0, 32)
@@ -152,20 +152,18 @@ closeBtn.TextSize = 16
 closeBtn.Font = Enum.Font.GothamBold
 closeBtn.Parent = header
 
--- Title Label
 local titleLabel = Instance.new("TextLabel")
 titleLabel.Name = "TitleLabel"
 titleLabel.Size = UDim2.new(1, -90, 1, 0)
 titleLabel.Position = UDim2.new(0, 46, 0, 0)
 titleLabel.BackgroundTransparency = 1
-titleLabel.Text = "Bloxburg Toolkit"
+titleLabel.Text = "Bloxburg & Utility Toolkit"
 titleLabel.TextColor3 = THEME.HeaderTitle
-titleLabel.TextSize = 15
+titleLabel.TextSize = 14
 titleLabel.Font = Enum.Font.GothamBold
 titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 titleLabel.Parent = header
 
--- Reset All Button (↻)
 local resetBtn = Instance.new("TextButton")
 resetBtn.Name = "ResetBtn"
 resetBtn.Size = UDim2.new(0, 32, 0, 32)
@@ -177,7 +175,6 @@ resetBtn.TextSize = 18
 resetBtn.Font = Enum.Font.GothamBold
 resetBtn.Parent = header
 
--- Helper: Create Section Title
 local function createSectionTitle(text, yPos)
     local label = Instance.new("TextLabel")
     label.Size = UDim2.new(1, -30, 0, 16)
@@ -192,7 +189,6 @@ local function createSectionTitle(text, yPos)
     return label
 end
 
--- Helper: Create Pill Button
 local function createPillButton(name, defaultText, xPos, yPos, width, height)
     local btn = Instance.new("TextButton")
     btn.Name = name
@@ -221,15 +217,14 @@ end
 
 -- Section 1: Movement
 createSectionTitle("Movement", 46)
-local jumpBtn = createPillButton("JumpBtn", "Inf Jump", 16, 66, 96)
-local noclipBtn = createPillButton("NoclipBtn", "Noclip", 118, 66, 88)
-local speedBtn = createPillButton("SpeedBtn", "Speed", 212, 66, 76)
+local jumpBtn = createPillButton("JumpBtn", "Inf Jump", 16, 66, 94)
+local noclipBtn = createPillButton("NoclipBtn", "Noclip", 116, 66, 88)
+local speedBtn = createPillButton("SpeedBtn", "Speed", 210, 66, 76)
 
--- Speed Input Pill Box
 local speedBox = Instance.new("TextBox")
 speedBox.Name = "SpeedInput"
-speedBox.Size = UDim2.new(0, 48, 0, 32)
-speedBox.Position = UDim2.new(0, 294, 0, 66)
+speedBox.Size = UDim2.new(0, 50, 0, 32)
+speedBox.Position = UDim2.new(0, 292, 0, 66)
 speedBox.BackgroundColor3 = THEME.PillInactiveBg
 speedBox.Text = tostring(targetSpeed)
 speedBox.TextColor3 = THEME.HeaderTitle
@@ -247,12 +242,13 @@ speedBoxStroke.Color = THEME.PillInactiveStroke
 speedBoxStroke.Thickness = 1.2
 speedBoxStroke.Parent = speedBox
 
--- Section 2: Visuals & ESP
-createSectionTitle("Visuals & Detection", 112)
-local espBtn = createPillButton("PlayerEspBtn", "Player ESP", 16, 132, 110)
-local itemEspBtn = createPillButton("ItemEspBtn", "Item ESP", 132, 132, 110)
+-- Section 2: Combat & Visuals
+createSectionTitle("Defense & Visuals", 112)
+local espBtn = createPillButton("PlayerEspBtn", "Player ESP", 16, 132, 102)
+local itemEspBtn = createPillButton("ItemEspBtn", "Item ESP", 124, 132, 102)
+local godmodeBtn = createPillButton("GodmodeBtn", "Godmode", 232, 132, 110)
 
--- Floating Minimized Pill
+-- Floating Restore Bubble
 local restoreBtn = Instance.new("TextButton")
 restoreBtn.Size = UDim2.new(0, 68, 0, 32)
 restoreBtn.Position = UDim2.new(0.5, -34, 0.05, 0)
@@ -273,7 +269,7 @@ resStroke.Color = THEME.PillActiveTealStroke
 resStroke.Thickness = 1.2
 resStroke.Parent = restoreBtn
 
--- Drag & Minimize Connections
+-- Drag & Window Toggle
 makeDraggable(header, mainCard)
 local restoreWasDragged = makeDraggable(restoreBtn, restoreBtn)
 
@@ -302,7 +298,7 @@ speedBox.FocusLost:Connect(function()
     speedBox.Text = tostring(targetSpeed)
 end)
 
--- ========== PILL STYLE HANDLERS ==========
+-- ========== TOGGLE FUNCTIONS & STYLES ==========
 local function updatePillVisual(btn, active, activeText, inactiveText, usePurple)
     local stroke = btn:FindFirstChild("Stroke")
     if active then
@@ -342,7 +338,7 @@ end
 
 local function setSpeedEnabled(state)
     speedEnabled = state
-    updatePillVisual(speedBtn, speedEnabled, "Speed", "Speed", true) -- Uses purple accent from the image
+    updatePillVisual(speedBtn, speedEnabled, "Speed", "Speed", true)
 end
 
 local function setPlayerESPEnabled(state)
@@ -361,12 +357,44 @@ local function setItemESPEnabled(state)
     end
 end
 
--- Button Clicks
+local function setGodmodeEnabled(state)
+    godmodeEnabled = state
+    updatePillVisual(godmodeBtn, godmodeEnabled, "Godmode", "Godmode", true)
+
+    local character = player.Character
+    if not character then return end
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+
+    if godmodeEnabled then
+        -- Suppress local dead state
+        if humanoid then
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+        end
+        -- Disable CanTouch on limbs to stop physical mob damage triggers
+        for _, part in ipairs(character:GetDescendants()) do
+            if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                part.CanTouch = false
+            end
+        end
+    else
+        -- Restore touch collision detection
+        if humanoid then
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
+        end
+        for _, part in ipairs(character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanTouch = true
+            end
+        end
+    end
+end
+
 jumpBtn.MouseButton1Click:Connect(function() setJumpEnabled(not infJumpEnabled) end)
 noclipBtn.MouseButton1Click:Connect(function() setNoclipEnabled(not noclipEnabled) end)
 speedBtn.MouseButton1Click:Connect(function() setSpeedEnabled(not speedEnabled) end)
 espBtn.MouseButton1Click:Connect(function() setPlayerESPEnabled(not espEnabled) end)
 itemEspBtn.MouseButton1Click:Connect(function() setItemESPEnabled(not itemEspEnabled) end)
+godmodeBtn.MouseButton1Click:Connect(function() setGodmodeEnabled(not godmodeEnabled) end)
 
 -- Reset All (↻)
 resetBtn.MouseButton1Click:Connect(function()
@@ -375,9 +403,10 @@ resetBtn.MouseButton1Click:Connect(function()
     setSpeedEnabled(false)
     setPlayerESPEnabled(false)
     setItemESPEnabled(false)
+    setGodmodeEnabled(false)
 end)
 
--- Keybind Fallbacks (PC)
+-- Keybinds
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.KeyCode == Enum.KeyCode.J then setJumpEnabled(not infJumpEnabled)
@@ -385,10 +414,55 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     elseif input.KeyCode == Enum.KeyCode.B then setSpeedEnabled(not speedEnabled)
     elseif input.KeyCode == Enum.KeyCode.K then setPlayerESPEnabled(not espEnabled)
     elseif input.KeyCode == Enum.KeyCode.L then setItemESPEnabled(not itemEspEnabled)
+    elseif input.KeyCode == Enum.KeyCode.G then setGodmodeEnabled(not godmodeEnabled)
     end
 end)
 
--- ========== ENGINE LOOPS ==========
+-- Re-apply defenses when character respawns
+player.CharacterAdded:Connect(function(newChar)
+    if godmodeEnabled then
+        task.wait(0.2)
+        local humanoid = newChar:WaitForChild("Humanoid", 3)
+        if humanoid then
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+        end
+        for _, part in ipairs(newChar:GetDescendants()) do
+            if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                part.CanTouch = false
+            end
+        end
+    end
+end)
+
+-- ========== EXECUTOR METATABLE DAMAGE HOOK ==========
+-- Intercepts client-side TakeDamage and BreakJoints invocations
+if hookmetamethod then
+    local oldNamecall
+    oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+        local method = getnamecallmethod()
+        if godmodeEnabled and (method == "TakeDamage" or method == "BreakJoints") then
+            if player.Character and self:IsDescendantOf(player.Character) then
+                return nil
+            end
+        end
+        return oldNamecall(self, ...)
+    end)
+end
+
+-- Continuous touch enforcement (prevents game scripts from turning CanTouch back on)
+RunService.Stepped:Connect(function()
+    if not godmodeEnabled then return end
+    local character = player.Character
+    if not character then return end
+
+    for _, part in ipairs(character:GetDescendants()) do
+        if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" and part.CanTouch then
+            part.CanTouch = false
+        end
+    end
+end)
+
+-- ========== MOVEMENT ENGINES ==========
 
 -- Noclip loop
 RunService.Stepped:Connect(function()
@@ -424,7 +498,7 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- Infinite Jump with Ground-Proximity Raycast
+-- Infinite Jump
 local jumpRayParams = RaycastParams.new()
 jumpRayParams.FilterType = Enum.RaycastFilterType.Exclude
 jumpRayParams.IgnoreWater = true
@@ -446,7 +520,7 @@ UserInputService.JumpRequest:Connect(function()
     end
 end)
 
--- ========== ESP BILLBOARD HELPERS ==========
+-- ========== ESP BILLBOARDS ==========
 local function getDistColor(dist)
     if dist < 100 then return Color3.fromRGB(90, 255, 90) end
     if dist < 400 then return Color3.fromRGB(255, 220, 90) end
