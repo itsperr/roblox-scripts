@@ -1,4 +1,4 @@
--- Player Scanner & Eliminator (PJ Modern Edition)
+-- Player Scanner & Kamikaze Void Eliminator (PJ Modern Edition)
 -- Optimized for Delta Executor & Touch / Mouse
 
 local Players = game:GetService("Players")
@@ -132,7 +132,7 @@ TitleLabel.Name = "TitleLabel"
 TitleLabel.Size = UDim2.new(1, -85, 1, 0)
 TitleLabel.Position = UDim2.new(0, 40, 0, 0)
 TitleLabel.BackgroundTransparency = 1
-TitleLabel.Text = "Player Eliminator"
+TitleLabel.Text = "Kamikaze Void Slammer"
 TitleLabel.TextColor3 = THEME.HeaderTitle
 TitleLabel.TextSize = 13
 TitleLabel.Font = THEME.Font
@@ -163,7 +163,7 @@ TargetLabel.Font = THEME.Font
 TargetLabel.TextXAlignment = Enum.TextXAlignment.Left
 TargetLabel.Parent = MainCard
 
--- Dropdown Trigger Button
+-- Dropdown Button
 local Dropdown = Instance.new("TextButton")
 Dropdown.Name = "DropdownTrigger"
 Dropdown.Size = UDim2.new(1, -32, 0, 36)
@@ -182,14 +182,14 @@ local dropCorner = Instance.new("UICorner")
 dropCorner.CornerRadius = UDim.new(0, 10)
 dropCorner.Parent = Dropdown
 
--- Eliminate Action Button
+-- Void Slam Button
 local EliminateButton = Instance.new("TextButton")
 EliminateButton.Name = "EliminateButton"
 EliminateButton.Size = UDim2.new(1, -32, 0, 38)
 EliminateButton.Position = UDim2.new(0, 16, 0, 120)
 EliminateButton.BackgroundColor3 = THEME.EliminateBtnBg
 EliminateButton.BorderSizePixel = 0
-EliminateButton.Text = "Eliminate Target"
+EliminateButton.Text = "Void Slam (Kamikaze)"
 EliminateButton.TextColor3 = THEME.EliminateBtnText
 EliminateButton.TextSize = 12
 EliminateButton.Font = THEME.Font
@@ -213,7 +213,7 @@ StatusLabel.Font = THEME.Font
 StatusLabel.TextXAlignment = Enum.TextXAlignment.Center
 StatusLabel.Parent = MainCard
 
--- Floating Dropdown Popover Frame
+-- Dropdown Scrolling Frame
 local ListFrame = Instance.new("ScrollingFrame")
 ListFrame.Name = "PlayerListScroll"
 ListFrame.Size = UDim2.new(1, -32, 0, 110)
@@ -340,13 +340,13 @@ RefreshBtn.MouseButton1Click:Connect(function()
     StatusLabel.Text = "List Refreshed"
 end)
 
--- ========== UNIVERSAL FE FLING ENGINE ==========
+-- ========== KAMIKAZE VOID SLAM ENGINE ==========
 local isEliminating = false
 
-local function eliminatePlayer(target)
+local function voidTogether(target)
     if isEliminating then return end
     if not target or not target.Character then
-        StatusLabel.Text = "Error: Invalid Target"
+        StatusLabel.Text = "Target not loaded"
         return
     end
 
@@ -358,66 +358,77 @@ local function eliminatePlayer(target)
     local targetHum = targetChar:FindFirstChildOfClass("Humanoid")
 
     if not myRoot or not myHum or myHum.Health <= 0 then
-        StatusLabel.Text = "Error: You are dead/not loaded"
+        StatusLabel.Text = "You must be alive"
         return
     end
 
     if not targetRoot or not targetHum or targetHum.Health <= 0 then
-        StatusLabel.Text = "Target is already dead"
+        StatusLabel.Text = "Target already dead"
         return
     end
 
     isEliminating = true
-    StatusLabel.Text = "Eliminating " .. target.Name .. "..."
-    StatusLabel.TextColor3 = Color3.fromRGB(255, 180, 60)
+    StatusLabel.Text = "Dragging " .. target.DisplayName .. " to void..."
+    StatusLabel.TextColor3 = Color3.fromRGB(235, 60, 75)
 
-    local originalPos = myRoot.CFrame
+    -- Disable limb collision on self to avoid self-crushing before reaching void
+    for _, part in ipairs(myChar:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.CanCollide = false
+        end
+    end
+    myHum:ChangeState(Enum.HumanoidStateType.Physics)
+
+    -- High downward velocity force to drive collision past boundaries
+    local slamForce = Instance.new("BodyVelocity")
+    slamForce.Name = "VoidSlamVelocity"
+    slamForce.Velocity = Vector3.new(0, -5000, 0)
+    slamForce.MaxForce = Vector3.new(0, math.huge, 0)
+    slamForce.P = 1500
+    slamForce.Parent = myRoot
+
+    local slamTorque = Instance.new("BodyAngularVelocity")
+    slamTorque.Name = "VoidSlamTorque"
+    slamTorque.AngularVelocity = Vector3.new(5000, 5000, 5000)
+    slamTorque.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+    slamTorque.Parent = myRoot
+
     local startTime = os.clock()
-    local flingDuration = 1.0
+    local maxDuration = 4.0
 
-    -- Suppress character states during high-speed physics interaction
-    myHum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
-
-    -- Heartbeat Fling Loop
-    local flingLoop
-    flingLoop = RunService.Heartbeat:Connect(function()
-        if os.clock() - startTime > flingDuration or not targetRoot or not targetRoot.Parent or targetHum.Health <= 0 then
-            if flingLoop then flingLoop:Disconnect() end
+    local connection
+    connection = RunService.Heartbeat:Connect(function()
+        -- Terminate if duration exceeds, target dies, or self dies
+        if (os.clock() - startTime > maxDuration) 
+            or not targetRoot or not targetRoot.Parent 
+            or targetHum.Health <= 0 
+            or myHum.Health <= 0 then
+            
+            if connection then connection:Disconnect() end
             return
         end
 
-        -- Propel physics assembly with extreme rotational & directional momentum
-        myRoot.AssemblyLinearVelocity = Vector3.new(50000, 50000, 50000)
-        myRoot.AssemblyAngularVelocity = Vector3.new(100000, 100000, 100000)
-
-        -- Micro-oscillate inside the target root part to force physics collision overlap
-        myRoot.CFrame = targetRoot.CFrame * CFrame.Angles(
-            math.rad(math.random(-180, 180)),
-            math.rad(math.random(-180, 180)),
-            math.rad(math.random(-180, 180))
-        )
+        -- Latch directly onto their upper torso/head to force physical pushdown
+        myRoot.CFrame = targetRoot.CFrame * CFrame.new(0, 1.2, 0)
     end)
 
-    task.wait(flingDuration)
-    if flingLoop then flingLoop:Disconnect() end
+    task.wait(maxDuration)
+    if connection then connection:Disconnect() end
 
-    -- Safe return to start location
-    task.wait(0.05)
-    myRoot.AssemblyLinearVelocity = Vector3.zero
-    myRoot.AssemblyAngularVelocity = Vector3.zero
-    myRoot.CFrame = originalPos
-    myHum:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
+    -- Cleanup physics movers if character didn't reset
+    if slamForce and slamForce.Parent then slamForce:Destroy() end
+    if slamTorque and slamTorque.Parent then slamTorque:Destroy() end
 
     isEliminating = false
-    StatusLabel.Text = "Elimination Attempt Complete"
+    StatusLabel.Text = "Operation Finished"
     StatusLabel.TextColor3 = THEME.SectionTitle
 end
 
 EliminateButton.MouseButton1Click:Connect(function()
-    eliminatePlayer(selectedPlayer)
+    voidTogether(selectedPlayer)
 end)
 
--- Auto-refresh if players join or leave
+-- Dynamic Player List Management
 Players.PlayerAdded:Connect(updatePlayerList)
 Players.PlayerRemoving:Connect(function(leaving)
     if selectedPlayer == leaving then
