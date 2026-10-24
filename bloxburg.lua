@@ -1,109 +1,333 @@
--- Player Scanner and Eliminator Script for Delta Executor
+-- Player Scanner & Eliminator (PJ Modern Edition)
+-- Optimized for Delta Executor & Touch / Mouse
+
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+
 local LocalPlayer = Players.LocalPlayer
 
--- Create GUI
+-- UI Theme
+local THEME = {
+    CardBg = Color3.fromRGB(18, 20, 26),
+    CardStroke = Color3.fromRGB(36, 40, 52),
+    HeaderTitle = Color3.fromRGB(240, 242, 248),
+    SectionTitle = Color3.fromRGB(120, 128, 146),
+    
+    TileBg = Color3.fromRGB(28, 31, 40),
+    TileHover = Color3.fromRGB(36, 40, 52),
+    TileText = Color3.fromRGB(200, 205, 220),
+    
+    EliminateBtnBg = Color3.fromRGB(235, 60, 75),
+    EliminateBtnText = Color3.fromRGB(255, 255, 255),
+    
+    WidgetBg = Color3.fromRGB(22, 25, 34),
+    WidgetStroke = Color3.fromRGB(235, 60, 75),
+    WidgetText = Color3.fromRGB(235, 60, 75),
+    
+    Font = Enum.Font.Ubuntu
+}
+
+-- Safe UI Parent
+local function getSafeUiParent()
+    if gethui then return gethui() end
+    local success, coreGui = pcall(function() return game:GetService("CoreGui") end)
+    if success and coreGui then return coreGui end
+    return LocalPlayer:WaitForChild("PlayerGui")
+end
+
+local parentContainer = getSafeUiParent()
+
+-- Clean existing instances
+local oldGui = parentContainer:FindFirstChild("PE_PJ_ScreenGui")
+if oldGui then oldGui:Destroy() end
+
+-- ScreenGui Setup
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Parent = game:GetService("CoreGui")
-ScreenGui.Name = "PlayerEliminator"
+ScreenGui.Name = "PE_PJ_ScreenGui"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = parentContainer
 
--- Main Frame
-local MainFrame = Instance.new("Frame")
-MainFrame.Parent = ScreenGui
-MainFrame.Size = UDim2.new(0, 300, 0, 200)
-MainFrame.Position = UDim2.new(0.5, -150, 0.5, -100)
-MainFrame.BackgroundColor3 = Color3.new(0.1, 0.1, 0.1)
-MainFrame.BorderSizePixel = 0
-MainFrame.Active = true
-MainFrame.Draggable = true
+-- ========== DRAG HELPER (TOUCH & MOUSE) ==========
+local function makeDraggable(handle, target)
+    local dragging = false
+    local dragInput, dragStart, startPos
+    local moved = false
 
--- Title
-local Title = Instance.new("TextLabel")
-Title.Parent = MainFrame
-Title.Size = UDim2.new(1, 0, 0, 30)
-Title.Position = UDim2.new(0, 0, 0, 0)
-Title.BackgroundColor3 = Color3.new(0.2, 0.2, 0.2)
-Title.BorderSizePixel = 0
-Title.Text = "Player Eliminator"
-Title.TextColor3 = Color3.new(1, 1, 1)
-Title.Font = Enum.Font.SourceSansBold
-Title.TextSize = 16
+    handle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            moved = false
+            dragStart = input.Position
+            startPos = target.Position
+        end
+    end)
 
--- Player Dropdown
+    handle.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input == dragInput then
+            local delta = input.Position - dragStart
+            if delta.Magnitude > 4 then moved = true end
+            target.Position = UDim2.new(
+                startPos.X.Scale, startPos.X.Offset + delta.X,
+                startPos.Y.Scale, startPos.Y.Offset + delta.Y
+            )
+        end
+    end)
+
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+
+    return function() return moved end
+end
+
+-- Main Window Card (320x215)
+local MainCard = Instance.new("Frame")
+MainCard.Name = "MainCard"
+MainCard.Size = UDim2.new(0, 320, 0, 215)
+MainCard.Position = UDim2.new(0.5, -160, 0.5, -107)
+MainCard.BackgroundColor3 = THEME.CardBg
+MainCard.BorderSizePixel = 0
+MainCard.Parent = ScreenGui
+
+local cardCorner = Instance.new("UICorner")
+cardCorner.CornerRadius = UDim.new(0, 16)
+cardCorner.Parent = MainCard
+
+local cardStroke = Instance.new("UIStroke")
+cardStroke.Color = THEME.CardStroke
+cardStroke.Thickness = 1.2
+cardStroke.Parent = MainCard
+
+-- Header
+local Header = Instance.new("Frame")
+Header.Name = "Header"
+Header.Size = UDim2.new(1, 0, 0, 42)
+Header.BackgroundTransparency = 1
+Header.Parent = MainCard
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Name = "CloseBtn"
+CloseBtn.Size = UDim2.new(0, 32, 0, 32)
+CloseBtn.Position = UDim2.new(0, 8, 0, 5)
+CloseBtn.BackgroundTransparency = 1
+CloseBtn.BorderSizePixel = 0
+CloseBtn.Text = "✕"
+CloseBtn.TextColor3 = THEME.HeaderTitle
+CloseBtn.TextSize = 14
+CloseBtn.Font = THEME.Font
+CloseBtn.Parent = Header
+
+local TitleLabel = Instance.new("TextLabel")
+TitleLabel.Name = "TitleLabel"
+TitleLabel.Size = UDim2.new(1, -85, 1, 0)
+TitleLabel.Position = UDim2.new(0, 40, 0, 0)
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.Text = "Player Eliminator"
+TitleLabel.TextColor3 = THEME.HeaderTitle
+TitleLabel.TextSize = 13
+TitleLabel.Font = THEME.Font
+TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+TitleLabel.Parent = Header
+
+local RefreshBtn = Instance.new("TextButton")
+RefreshBtn.Name = "RefreshBtn"
+RefreshBtn.Size = UDim2.new(0, 32, 0, 32)
+RefreshBtn.Position = UDim2.new(1, -40, 0, 5)
+RefreshBtn.BackgroundTransparency = 1
+RefreshBtn.BorderSizePixel = 0
+RefreshBtn.Text = "↻"
+RefreshBtn.TextColor3 = THEME.SectionTitle
+RefreshBtn.TextSize = 16
+RefreshBtn.Font = THEME.Font
+RefreshBtn.Parent = Header
+
+-- Target Section Label
+local TargetLabel = Instance.new("TextLabel")
+TargetLabel.Size = UDim2.new(1, -32, 0, 16)
+TargetLabel.Position = UDim2.new(0, 16, 0, 48)
+TargetLabel.BackgroundTransparency = 1
+TargetLabel.Text = "TARGET SELECTION"
+TargetLabel.TextColor3 = THEME.SectionTitle
+TargetLabel.TextSize = 10
+TargetLabel.Font = THEME.Font
+TargetLabel.TextXAlignment = Enum.TextXAlignment.Left
+TargetLabel.Parent = MainCard
+
+-- Dropdown Trigger Button
 local Dropdown = Instance.new("TextButton")
-Dropdown.Parent = MainFrame
-Dropdown.Size = UDim2.new(0, 280, 0, 30)
-Dropdown.Position = UDim2.new(0, 10, 0, 50)
-Dropdown.BackgroundColor3 = Color3.new(0.2, 0.2, 0.2)
+Dropdown.Name = "DropdownTrigger"
+Dropdown.Size = UDim2.new(1, -32, 0, 36)
+Dropdown.Position = UDim2.new(0, 16, 0, 70)
+Dropdown.BackgroundColor3 = THEME.TileBg
 Dropdown.BorderSizePixel = 0
-Dropdown.Text = "Select Player"
-Dropdown.TextColor3 = Color3.new(1, 1, 1)
-Dropdown.Font = Enum.Font.SourceSans
-Dropdown.TextSize = 14
+Dropdown.Text = "  Select Target Player  ▼"
+Dropdown.TextColor3 = THEME.TileText
+Dropdown.TextSize = 11
+Dropdown.Font = THEME.Font
+Dropdown.TextXAlignment = Enum.TextXAlignment.Left
+Dropdown.AutoButtonColor = false
+Dropdown.Parent = MainCard
 
--- Dropdown List Frame
+local dropCorner = Instance.new("UICorner")
+dropCorner.CornerRadius = UDim.new(0, 10)
+dropCorner.Parent = Dropdown
+
+-- Eliminate Action Button
+local EliminateButton = Instance.new("TextButton")
+EliminateButton.Name = "EliminateButton"
+EliminateButton.Size = UDim2.new(1, -32, 0, 38)
+EliminateButton.Position = UDim2.new(0, 16, 0, 120)
+EliminateButton.BackgroundColor3 = THEME.EliminateBtnBg
+EliminateButton.BorderSizePixel = 0
+EliminateButton.Text = "Eliminate Target"
+EliminateButton.TextColor3 = THEME.EliminateBtnText
+EliminateButton.TextSize = 12
+EliminateButton.Font = THEME.Font
+EliminateButton.AutoButtonColor = false
+EliminateButton.Parent = MainCard
+
+local elimCorner = Instance.new("UICorner")
+elimCorner.CornerRadius = UDim.new(0, 10)
+elimCorner.Parent = EliminateButton
+
+-- Status Label
+local StatusLabel = Instance.new("TextLabel")
+StatusLabel.Name = "StatusLabel"
+StatusLabel.Size = UDim2.new(1, -32, 0, 20)
+StatusLabel.Position = UDim2.new(0, 16, 0, 172)
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.Text = "Status: Idle"
+StatusLabel.TextColor3 = THEME.SectionTitle
+StatusLabel.TextSize = 10
+StatusLabel.Font = THEME.Font
+StatusLabel.TextXAlignment = Enum.TextXAlignment.Center
+StatusLabel.Parent = MainCard
+
+-- Floating Dropdown Popover Frame
 local ListFrame = Instance.new("ScrollingFrame")
-ListFrame.Parent = MainFrame
-ListFrame.Size = UDim2.new(0, 280, 0, 100)
-ListFrame.Position = UDim2.new(0, 10, 0, 80)
-ListFrame.BackgroundColor3 = Color3.new(0.15, 0.15, 0.15)
+ListFrame.Name = "PlayerListScroll"
+ListFrame.Size = UDim2.new(1, -32, 0, 110)
+ListFrame.Position = UDim2.new(0, 16, 0, 110)
+ListFrame.BackgroundColor3 = Color3.fromRGB(24, 27, 36)
 ListFrame.BorderSizePixel = 0
 ListFrame.Visible = false
-ListFrame.ScrollBarThickness = 5
+ListFrame.ZIndex = 10
+ListFrame.ScrollBarThickness = 3
+ListFrame.ScrollBarImageColor3 = THEME.SectionTitle
+ListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+ListFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+ListFrame.Parent = MainCard
 
--- Eliminate Button
-local EliminateButton = Instance.new("TextButton")
-EliminateButton.Parent = MainFrame
-EliminateButton.Size = UDim2.new(0, 280, 0, 30)
-EliminateButton.Position = UDim2.new(0, 10, 0, 170)
-EliminateButton.BackgroundColor3 = Color3.new(0.8, 0.2, 0.2)
-EliminateButton.BorderSizePixel = 0
-EliminateButton.Text = "Eliminate Player"
-EliminateButton.TextColor3 = Color3.new(1, 1, 1)
-EliminateButton.Font = Enum.Font.SourceSansBold
-EliminateButton.TextSize = 14
+local listCorner = Instance.new("UICorner")
+listCorner.CornerRadius = UDim.new(0, 10)
+listCorner.Parent = ListFrame
 
--- Variable to store selected player
+local listStroke = Instance.new("UIStroke")
+listStroke.Color = THEME.CardStroke
+listStroke.Thickness = 1
+listStroke.Parent = ListFrame
+
+local listLayout = Instance.new("UIListLayout")
+listLayout.Padding = UDim.new(0, 2)
+listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+listLayout.Parent = ListFrame
+
+-- Squared PJ Minimized Widget
+local RestoreBtn = Instance.new("TextButton")
+RestoreBtn.Name = "PJ_EliminatorWidget"
+RestoreBtn.Size = UDim2.new(0, 42, 0, 42)
+RestoreBtn.Position = UDim2.new(0.5, -21, 0.05, 0)
+RestoreBtn.BackgroundColor3 = THEME.WidgetBg
+RestoreBtn.BorderSizePixel = 0
+RestoreBtn.Text = "PJ"
+RestoreBtn.TextColor3 = THEME.WidgetText
+RestoreBtn.TextSize = 15
+RestoreBtn.Font = THEME.Font
+RestoreBtn.Visible = false
+RestoreBtn.Parent = ScreenGui
+
+local resCorner = Instance.new("UICorner")
+resCorner.CornerRadius = UDim.new(0, 10)
+resCorner.Parent = RestoreBtn
+
+local resStroke = Instance.new("UIStroke")
+resStroke.Color = THEME.WidgetStroke
+resStroke.Thickness = 1.4
+resStroke.Parent = RestoreBtn
+
+-- Drag & Window Toggles
+makeDraggable(Header, MainCard)
+local restoreWasDragged = makeDraggable(RestoreBtn, RestoreBtn)
+
+CloseBtn.MouseButton1Click:Connect(function()
+    RestoreBtn.Position = UDim2.new(MainCard.Position.X.Scale, MainCard.Position.X.Offset, MainCard.Position.Y.Scale, MainCard.Position.Y.Offset)
+    MainCard.Visible = false
+    RestoreBtn.Visible = true
+end)
+
+RestoreBtn.MouseButton1Click:Connect(function()
+    if restoreWasDragged() then return end
+    MainCard.Position = UDim2.new(RestoreBtn.Position.X.Scale, RestoreBtn.Position.X.Offset, RestoreBtn.Position.Y.Scale, RestoreBtn.Position.Y.Offset)
+    MainCard.Visible = true
+    RestoreBtn.Visible = false
+end)
+
+-- Player List Builder
 local selectedPlayer = nil
 
--- Function to update player list
 local function updatePlayerList()
-    -- Clear existing buttons
-    for _, child in pairs(ListFrame:GetChildren()) do
+    for _, child in ipairs(ListFrame:GetChildren()) do
         if child:IsA("TextButton") then
             child:Destroy()
         end
     end
-    
-    -- Add buttons for each player
-    local yOffset = 0
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer then -- Exclude local player
-            local playerButton = Instance.new("TextButton")
-            playerButton.Parent = ListFrame
-            playerButton.Size = UDim2.new(1, 0, 0, 25)
-            playerButton.Position = UDim2.new(0, 0, 0, yOffset)
-            playerButton.BackgroundColor3 = Color3.new(0.2, 0.2, 0.2)
-            playerButton.BorderSizePixel = 0
-            playerButton.Text = player.Name
-            playerButton.TextColor3 = Color3.new(1, 1, 1)
-            playerButton.Font = Enum.Font.SourceSans
-            playerButton.TextSize = 14
+
+    for _, target in ipairs(Players:GetPlayers()) do
+        if target ~= LocalPlayer then
+            local btn = Instance.new("TextButton")
+            btn.Name = target.Name
+            btn.Size = UDim2.new(1, -6, 0, 28)
+            btn.BackgroundColor3 = THEME.TileBg
+            btn.BorderSizePixel = 0
+            btn.ZIndex = 11
             
-            playerButton.MouseButton1Click:Connect(function()
-                selectedPlayer = player
-                Dropdown.Text = player.Name
+            local nameDisplay = target.DisplayName ~= target.Name 
+                and string.format(" %s (@%s)", target.DisplayName, target.Name)
+                or string.format(" %s", target.Name)
+            
+            btn.Text = nameDisplay
+            btn.TextColor3 = THEME.TileText
+            btn.TextSize = 10
+            btn.Font = THEME.Font
+            btn.TextXAlignment = Enum.TextXAlignment.Left
+            btn.AutoButtonColor = true
+            btn.Parent = ListFrame
+
+            local btnCorner = Instance.new("UICorner")
+            btnCorner.CornerRadius = UDim.new(0, 6)
+            btnCorner.Parent = btn
+
+            btn.MouseButton1Click:Connect(function()
+                selectedPlayer = target
+                Dropdown.Text = "  " .. target.DisplayName .. "  ✓"
+                Dropdown.TextColor3 = THEME.HeaderTitle
                 ListFrame.Visible = false
+                StatusLabel.Text = "Selected: " .. target.Name
             end)
-            
-            yOffset = yOffset + 25
         end
     end
-    
-    ListFrame.CanvasSize = UDim2.new(0, 0, 0, yOffset)
 end
 
--- Toggle dropdown visibility
 Dropdown.MouseButton1Click:Connect(function()
     ListFrame.Visible = not ListFrame.Visible
     if ListFrame.Visible then
@@ -111,18 +335,99 @@ Dropdown.MouseButton1Click:Connect(function()
     end
 end)
 
--- Close dropdown when clicking outside
-MainFrame.MouseButton1Click:Connect(function()
-    ListFrame.Visible = false
+RefreshBtn.MouseButton1Click:Connect(function()
+    updatePlayerList()
+    StatusLabel.Text = "List Refreshed"
 end)
 
--- Eliminate function
-EliminateButton.MouseButton1Click:Connect(function()
-    if selectedPlayer and selectedPlayer.Character and selectedPlayer.Character:FindFirstChild("Humanoid") then
-        -- Set health to 0 to eliminate the player
-        selectedPlayer.Character.Humanoid.Health = 0
+-- ========== UNIVERSAL FE FLING ENGINE ==========
+local isEliminating = false
+
+local function eliminatePlayer(target)
+    if isEliminating then return end
+    if not target or not target.Character then
+        StatusLabel.Text = "Error: Invalid Target"
+        return
     end
+
+    local myChar = LocalPlayer.Character
+    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    local myHum = myChar and myChar:FindFirstChildOfClass("Humanoid")
+    local targetChar = target.Character
+    local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
+    local targetHum = targetChar:FindFirstChildOfClass("Humanoid")
+
+    if not myRoot or not myHum or myHum.Health <= 0 then
+        StatusLabel.Text = "Error: You are dead/not loaded"
+        return
+    end
+
+    if not targetRoot or not targetHum or targetHum.Health <= 0 then
+        StatusLabel.Text = "Target is already dead"
+        return
+    end
+
+    isEliminating = true
+    StatusLabel.Text = "Eliminating " .. target.Name .. "..."
+    StatusLabel.TextColor3 = Color3.fromRGB(255, 180, 60)
+
+    local originalPos = myRoot.CFrame
+    local startTime = os.clock()
+    local flingDuration = 1.0
+
+    -- Suppress character states during high-speed physics interaction
+    myHum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+
+    -- Heartbeat Fling Loop
+    local flingLoop
+    flingLoop = RunService.Heartbeat:Connect(function()
+        if os.clock() - startTime > flingDuration or not targetRoot or not targetRoot.Parent or targetHum.Health <= 0 then
+            if flingLoop then flingLoop:Disconnect() end
+            return
+        end
+
+        -- Propel physics assembly with extreme rotational & directional momentum
+        myRoot.AssemblyLinearVelocity = Vector3.new(50000, 50000, 50000)
+        myRoot.AssemblyAngularVelocity = Vector3.new(100000, 100000, 100000)
+
+        -- Micro-oscillate inside the target root part to force physics collision overlap
+        myRoot.CFrame = targetRoot.CFrame * CFrame.Angles(
+            math.rad(math.random(-180, 180)),
+            math.rad(math.random(-180, 180)),
+            math.rad(math.random(-180, 180))
+        )
+    end)
+
+    task.wait(flingDuration)
+    if flingLoop then flingLoop:Disconnect() end
+
+    -- Safe return to start location
+    task.wait(0.05)
+    myRoot.AssemblyLinearVelocity = Vector3.zero
+    myRoot.AssemblyAngularVelocity = Vector3.zero
+    myRoot.CFrame = originalPos
+    myHum:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
+
+    isEliminating = false
+    StatusLabel.Text = "Elimination Attempt Complete"
+    StatusLabel.TextColor3 = THEME.SectionTitle
+end
+
+EliminateButton.MouseButton1Click:Connect(function()
+    eliminatePlayer(selectedPlayer)
 end)
 
--- Initial player list update
+-- Auto-refresh if players join or leave
+Players.PlayerAdded:Connect(updatePlayerList)
+Players.PlayerRemoving:Connect(function(leaving)
+    if selectedPlayer == leaving then
+        selectedPlayer = nil
+        Dropdown.Text = "  Select Target Player  ▼"
+        Dropdown.TextColor3 = THEME.TileText
+        StatusLabel.Text = "Target left the game"
+    end
+    updatePlayerList()
+end)
+
+-- Initial population
 updatePlayerList()
