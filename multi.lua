@@ -20,7 +20,6 @@ local minimized = false
 -- Settings
 local DEFAULT_SPEED = 16
 local targetSpeed = 24
-local MAX_HEIGHT = 80
 local ESP_RANGE = 5000
 local ITEM_ESP_RANGE = 2500
 local ESP_REFRESH = 0.15
@@ -28,20 +27,28 @@ local ITEM_SCAN_INTERVAL = 1.0
 
 -- UI Theme
 local THEME = {
-    CardBg = Color3.fromRGB(24, 26, 32),
-    CardStroke = Color3.fromRGB(45, 48, 58),
-    HeaderTitle = Color3.fromRGB(245, 245, 245),
-    SectionTitle = Color3.fromRGB(130, 138, 153),
-    PillInactiveBg = Color3.fromRGB(32, 35, 44),
-    PillInactiveStroke = Color3.fromRGB(55, 60, 74),
-    PillInactiveText = Color3.fromRGB(180, 185, 198),
-    PillActiveTealBg = Color3.fromRGB(20, 45, 40),
-    PillActiveTealStroke = Color3.fromRGB(50, 205, 140),
-    PillActiveTealText = Color3.fromRGB(255, 255, 255),
-    PillActivePurpleBg = Color3.fromRGB(110, 90, 205),
-    PillActivePurpleStroke = Color3.fromRGB(150, 130, 245),
+    CardBg = Color3.fromRGB(18, 20, 26),
+    CardStroke = Color3.fromRGB(38, 42, 54),
+    HeaderTitle = Color3.fromRGB(245, 247, 250),
+    SectionTitle = Color3.fromRGB(120, 128, 148),
+    
+    -- Inactive State (Border-free flat dark)
+    PillInactiveBg = Color3.fromRGB(28, 31, 40),
+    PillInactiveText = Color3.fromRGB(165, 172, 190),
+    
+    -- Active State (Vibrant Modern Glow)
+    PillActiveBg = Color3.fromRGB(59, 130, 246),       -- Clean Electric Blue
+    PillActiveText = Color3.fromRGB(255, 255, 255),
+    PillActivePurpleBg = Color3.fromRGB(139, 92, 246), -- Modern Violet
     PillActivePurpleText = Color3.fromRGB(255, 255, 255),
+    
+    -- Logo Widget
+    WidgetBg = Color3.fromRGB(22, 25, 34),
+    WidgetStroke = Color3.fromRGB(59, 130, 246),
+    WidgetText = Color3.fromRGB(245, 247, 250)
 }
+
+local MAIN_FONT = Enum.Font.Ubuntu
 
 -- Safe UI Container
 local function getSafeUiParent()
@@ -116,7 +123,7 @@ screenGui.Name = "BT_LandscapeUI"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = parentContainer
 
--- Main Landscape Card (360x210)
+-- Main Landscape Card
 local mainCard = Instance.new("Frame")
 mainCard.Name = "MainCard"
 mainCard.Size = UDim2.new(0, 360, 0, 210)
@@ -126,12 +133,12 @@ mainCard.BorderSizePixel = 0
 mainCard.Parent = screenGui
 
 local cardCorner = Instance.new("UICorner")
-cardCorner.CornerRadius = UDim.new(0, 18)
+cardCorner.CornerRadius = UDim.new(0, 16)
 cardCorner.Parent = mainCard
 
 local cardStroke = Instance.new("UIStroke")
 cardStroke.Color = THEME.CardStroke
-cardStroke.Thickness = 1.5
+cardStroke.Thickness = 1.2
 cardStroke.Parent = mainCard
 
 -- Top Header
@@ -148,8 +155,8 @@ closeBtn.Position = UDim2.new(0, 10, 0, 5)
 closeBtn.BackgroundTransparency = 1
 closeBtn.Text = "✕"
 closeBtn.TextColor3 = THEME.HeaderTitle
-closeBtn.TextSize = 16
-closeBtn.Font = Enum.Font.GothamBold
+closeBtn.TextSize = 15
+closeBtn.Font = MAIN_FONT
 closeBtn.Parent = header
 
 local titleLabel = Instance.new("TextLabel")
@@ -160,7 +167,7 @@ titleLabel.BackgroundTransparency = 1
 titleLabel.Text = "Bloxburg & Utility Toolkit"
 titleLabel.TextColor3 = THEME.HeaderTitle
 titleLabel.TextSize = 14
-titleLabel.Font = Enum.Font.GothamBold
+titleLabel.Font = MAIN_FONT
 titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 titleLabel.Parent = header
 
@@ -171,8 +178,8 @@ resetBtn.Position = UDim2.new(1, -40, 0, 5)
 resetBtn.BackgroundTransparency = 1
 resetBtn.Text = "↻"
 resetBtn.TextColor3 = THEME.SectionTitle
-resetBtn.TextSize = 18
-resetBtn.Font = Enum.Font.GothamBold
+resetBtn.TextSize = 17
+resetBtn.Font = MAIN_FONT
 resetBtn.Parent = header
 
 local function createSectionTitle(text, yPos)
@@ -183,34 +190,30 @@ local function createSectionTitle(text, yPos)
     label.Text = text
     label.TextColor3 = THEME.SectionTitle
     label.TextSize = 11
-    label.Font = Enum.Font.GothamBold
+    label.Font = MAIN_FONT
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.Parent = mainCard
     return label
 end
 
+-- Border-free clean pill button
 local function createPillButton(name, defaultText, xPos, yPos, width, height)
     local btn = Instance.new("TextButton")
     btn.Name = name
     btn.Size = UDim2.new(0, width, 0, height or 32)
     btn.Position = UDim2.new(0, xPos, 0, yPos)
     btn.BackgroundColor3 = THEME.PillInactiveBg
+    btn.BorderSizePixel = 0
     btn.Text = defaultText
     btn.TextColor3 = THEME.PillInactiveText
-    btn.TextSize = 11
-    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 12
+    btn.Font = MAIN_FONT
     btn.AutoButtonColor = false
     btn.Parent = mainCard
 
     local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 16)
+    corner.CornerRadius = UDim.new(0, 10)
     corner.Parent = btn
-
-    local stroke = Instance.new("UIStroke")
-    stroke.Name = "Stroke"
-    stroke.Color = THEME.PillInactiveStroke
-    stroke.Thickness = 1.2
-    stroke.Parent = btn
 
     return btn
 end
@@ -226,21 +229,17 @@ speedBox.Name = "SpeedInput"
 speedBox.Size = UDim2.new(0, 50, 0, 32)
 speedBox.Position = UDim2.new(0, 292, 0, 66)
 speedBox.BackgroundColor3 = THEME.PillInactiveBg
+speedBox.BorderSizePixel = 0
 speedBox.Text = tostring(targetSpeed)
 speedBox.TextColor3 = THEME.HeaderTitle
 speedBox.TextSize = 12
-speedBox.Font = Enum.Font.GothamBold
+speedBox.Font = MAIN_FONT
 speedBox.ClearTextOnFocus = false
 speedBox.Parent = mainCard
 
 local speedBoxCorner = Instance.new("UICorner")
-speedBoxCorner.CornerRadius = UDim.new(0, 16)
+speedBoxCorner.CornerRadius = UDim.new(0, 10)
 speedBoxCorner.Parent = speedBox
-
-local speedBoxStroke = Instance.new("UIStroke")
-speedBoxStroke.Color = THEME.PillInactiveStroke
-speedBoxStroke.Thickness = 1.2
-speedBoxStroke.Parent = speedBox
 
 -- Section 2: Combat & Visuals
 createSectionTitle("Defense & Visuals", 112)
@@ -248,25 +247,28 @@ local espBtn = createPillButton("PlayerEspBtn", "Player ESP", 16, 132, 102)
 local itemEspBtn = createPillButton("ItemEspBtn", "Item ESP", 124, 132, 102)
 local godmodeBtn = createPillButton("GodmodeBtn", "Godmode", 232, 132, 110)
 
--- Floating Restore Bubble
+-- ========== MINIMIZED FLOATING WIDGET (SQUARE "PJ") ==========
 local restoreBtn = Instance.new("TextButton")
-restoreBtn.Size = UDim2.new(0, 68, 0, 32)
-restoreBtn.Position = UDim2.new(0.5, -34, 0.05, 0)
-restoreBtn.BackgroundColor3 = THEME.CardBg
-restoreBtn.Text = "⚡ Toolkit"
-restoreBtn.TextColor3 = THEME.HeaderTitle
-restoreBtn.TextSize = 11
-restoreBtn.Font = Enum.Font.GothamBold
+restoreBtn.Name = "PJ_FloatingWidget"
+restoreBtn.Size = UDim2.new(0, 44, 0, 44)
+restoreBtn.Position = UDim2.new(0.5, -22, 0.08, 0)
+restoreBtn.BackgroundColor3 = THEME.WidgetBg
+restoreBtn.BorderSizePixel = 0
+restoreBtn.Text = "PJ"
+restoreBtn.TextColor3 = THEME.WidgetText
+restoreBtn.TextSize = 15
+restoreBtn.Font = MAIN_FONT
+restoreBtn.AutoButtonColor = false
 restoreBtn.Visible = false
 restoreBtn.Parent = screenGui
 
 local resCorner = Instance.new("UICorner")
-resCorner.CornerRadius = UDim.new(0, 16)
+resCorner.CornerRadius = UDim.new(0, 12)
 resCorner.Parent = restoreBtn
 
 local resStroke = Instance.new("UIStroke")
-resStroke.Color = THEME.PillActiveTealStroke
-resStroke.Thickness = 1.2
+resStroke.Color = THEME.WidgetStroke
+resStroke.Thickness = 1.5
 resStroke.Parent = restoreBtn
 
 -- Drag & Window Toggle
@@ -275,7 +277,7 @@ local restoreWasDragged = makeDraggable(restoreBtn, restoreBtn)
 
 closeBtn.MouseButton1Click:Connect(function()
     minimized = true
-    restoreBtn.Position = UDim2.new(mainCard.Position.X.Scale, mainCard.Position.X.Offset, mainCard.Position.Y.Scale, mainCard.Position.Y.Offset)
+    restoreBtn.Position = UDim2.new(mainCard.Position.X.Scale, mainCard.Position.X.Offset + 10, mainCard.Position.Y.Scale, mainCard.Position.Y.Offset + 10)
     mainCard.Visible = false
     restoreBtn.Visible = true
 end)
@@ -283,7 +285,7 @@ end)
 restoreBtn.MouseButton1Click:Connect(function()
     if restoreWasDragged() then return end
     minimized = false
-    mainCard.Position = UDim2.new(restoreBtn.Position.X.Scale, restoreBtn.Position.X.Offset, restoreBtn.Position.Y.Scale, restoreBtn.Position.Y.Offset)
+    mainCard.Position = UDim2.new(restoreBtn.Position.X.Scale, restoreBtn.Position.X.Offset - 10, restoreBtn.Position.Y.Scale, restoreBtn.Position.Y.Offset - 10)
     mainCard.Visible = true
     restoreBtn.Visible = false
 end)
@@ -300,20 +302,13 @@ end)
 
 -- ========== TOGGLE FUNCTIONS & STYLES ==========
 local function updatePillVisual(btn, active, activeText, inactiveText, usePurple)
-    local stroke = btn:FindFirstChild("Stroke")
     if active then
-        btn.BackgroundColor3 = usePurple and THEME.PillActivePurpleBg or THEME.PillActiveTealBg
-        btn.TextColor3 = usePurple and THEME.PillActivePurpleText or THEME.PillActiveTealText
-        if stroke then
-            stroke.Color = usePurple and THEME.PillActivePurpleStroke or THEME.PillActiveTealStroke
-        end
+        btn.BackgroundColor3 = usePurple and THEME.PillActivePurpleBg or THEME.PillActiveBg
+        btn.TextColor3 = usePurple and THEME.PillActivePurpleText or THEME.PillActiveText
         btn.Text = activeText .. " ✓"
     else
         btn.BackgroundColor3 = THEME.PillInactiveBg
         btn.TextColor3 = THEME.PillInactiveText
-        if stroke then
-            stroke.Color = THEME.PillInactiveStroke
-        end
         btn.Text = inactiveText
     end
 end
@@ -366,18 +361,15 @@ local function setGodmodeEnabled(state)
     local humanoid = character:FindFirstChildOfClass("Humanoid")
 
     if godmodeEnabled then
-        -- Suppress local dead state
         if humanoid then
             humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
         end
-        -- Disable CanTouch on limbs to stop physical mob damage triggers
         for _, part in ipairs(character:GetDescendants()) do
             if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
                 part.CanTouch = false
             end
         end
     else
-        -- Restore touch collision detection
         if humanoid then
             humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
         end
@@ -435,7 +427,6 @@ player.CharacterAdded:Connect(function(newChar)
 end)
 
 -- ========== EXECUTOR METATABLE DAMAGE HOOK ==========
--- Intercepts client-side TakeDamage and BreakJoints invocations
 if hookmetamethod then
     local oldNamecall
     oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
@@ -449,7 +440,7 @@ if hookmetamethod then
     end)
 end
 
--- Continuous touch enforcement (prevents game scripts from turning CanTouch back on)
+-- Continuous touch enforcement
 RunService.Stepped:Connect(function()
     if not godmodeEnabled then return end
     local character = player.Character
@@ -498,12 +489,12 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- Infinite Jump
-local jumpRayParams = RaycastParams.new()
-jumpRayParams.FilterType = Enum.RaycastFilterType.Exclude
-jumpRayParams.IgnoreWater = true
+-- ========== INFINITE JUMP ENGINE (UNLIMITED & HOLDABLE) ==========
+local JUMP_HOLD_CADENCE = 0.18
+local lastJumpTime = 0
+local isHoldingJump = false
 
-UserInputService.JumpRequest:Connect(function()
+local function performInfiniteJump()
     if not infJumpEnabled then return end
     local character = player.Character
     if not character then return end
@@ -511,11 +502,88 @@ UserInputService.JumpRequest:Connect(function()
     local humanoid = character:FindFirstChildOfClass("Humanoid")
     local rootPart = character:FindFirstChild("HumanoidRootPart")
 
-    if humanoid and rootPart then
-        jumpRayParams.FilterDescendantsInstances = {character}
-        local ray = Workspace:Raycast(rootPart.Position, Vector3.new(0, -MAX_HEIGHT, 0), jumpRayParams)
-        if ray then
-            humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+    if humanoid and rootPart and humanoid.Health > 0 then
+        local power = 50
+        if humanoid.UseJumpPower then
+            power = humanoid.JumpPower > 0 and humanoid.JumpPower or 50
+        else
+            local height = humanoid.JumpHeight > 0 and humanoid.JumpHeight or 7.2
+            power = math.sqrt(2 * Workspace.Gravity * height)
+        end
+
+        -- Overwrite vertical velocity directly to cancel downward falling force immediately
+        rootPart.AssemblyLinearVelocity = Vector3.new(
+            rootPart.AssemblyLinearVelocity.X,
+            power,
+            rootPart.AssemblyLinearVelocity.Z
+        )
+        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+    end
+end
+
+-- Tap / Spam Trigger
+UserInputService.JumpRequest:Connect(function()
+    performInfiniteJump()
+end)
+
+-- PC Keyboard Space Hold
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.Space then
+        isHoldingJump = true
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.KeyCode == Enum.KeyCode.Space then
+        isHoldingJump = false
+    end
+end)
+
+-- Mobile Touch Button Hold
+local function bindMobileJumpButton()
+    local playerGui = player:FindFirstChild("PlayerGui")
+    local touchGui = playerGui and playerGui:FindFirstChild("TouchGui")
+    local touchFrame = touchGui and touchGui:FindFirstChild("TouchControlFrame")
+    local jumpBtn = touchFrame and touchFrame:FindFirstChild("JumpButton")
+
+    if jumpBtn then
+        jumpBtn.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.Touch then
+                isHoldingJump = true
+            end
+        end)
+        jumpBtn.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.Touch then
+                isHoldingJump = false
+            end
+        end)
+    end
+end
+
+task.spawn(function()
+    bindMobileJumpButton()
+    player.PlayerGui.ChildAdded:Connect(function(child)
+        if child.Name == "TouchGui" then
+            task.wait(0.2)
+            bindMobileJumpButton()
+        end
+    end)
+end)
+
+-- Continuous Hold Loop
+RunService.Heartbeat:Connect(function()
+    if not infJumpEnabled then return end
+
+    local character = player.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    local holdingActive = isHoldingJump or (humanoid and humanoid.Jump)
+
+    if holdingActive then
+        local now = os.clock()
+        if now - lastJumpTime >= JUMP_HOLD_CADENCE then
+            lastJumpTime = now
+            performInfiniteJump()
         end
     end
 end)
@@ -547,7 +615,7 @@ local function createPlayerBillboard(targetPlayer, head)
     nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
     nameLabel.TextStrokeTransparency = 0.4
     nameLabel.TextSize = 12
-    nameLabel.Font = Enum.Font.GothamBold
+    nameLabel.Font = MAIN_FONT
     nameLabel.Parent = billboard
 
     local distLabel = Instance.new("TextLabel")
@@ -559,7 +627,7 @@ local function createPlayerBillboard(targetPlayer, head)
     distLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
     distLabel.TextStrokeTransparency = 0.4
     distLabel.TextSize = 10
-    distLabel.Font = Enum.Font.Gotham
+    distLabel.Font = MAIN_FONT
     distLabel.Parent = billboard
 
     return billboard
@@ -657,7 +725,7 @@ local function createItemBillboard(id, targetPart, displayName)
     nameLabel.TextColor3 = Color3.fromRGB(80, 220, 255)
     nameLabel.TextStrokeTransparency = 0.3
     nameLabel.TextSize = 11
-    nameLabel.Font = Enum.Font.GothamBold
+    nameLabel.Font = MAIN_FONT
     nameLabel.Parent = billboard
 
     local distLabel = Instance.new("TextLabel")
@@ -669,7 +737,7 @@ local function createItemBillboard(id, targetPart, displayName)
     distLabel.TextColor3 = Color3.fromRGB(240, 240, 240)
     distLabel.TextStrokeTransparency = 0.4
     distLabel.TextSize = 9
-    distLabel.Font = Enum.Font.Gotham
+    distLabel.Font = MAIN_FONT
     distLabel.Parent = billboard
 
     return billboard
