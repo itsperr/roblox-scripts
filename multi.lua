@@ -1,5 +1,5 @@
--- Bloxburg & Universal Toolkit (Horizontal Mobile Dock)
--- Optimized for Delta Executor & Touch / Mouse input
+-- Bloxburg & Universal Toolkit (Landscape Mobile Modal UI)
+-- Optimized for Mobile Landscape & Delta Executor
 
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
@@ -18,47 +18,57 @@ local minimized = false
 
 -- Settings
 local DEFAULT_SPEED = 16
-local targetSpeed = 24 -- Recommended default to prevent server rubberbanding
+local targetSpeed = 24
 local MAX_HEIGHT = 80
 local ESP_RANGE = 5000
 local ITEM_ESP_RANGE = 2500
 local ESP_REFRESH = 0.15
 local ITEM_SCAN_INTERVAL = 1.0
 
+-- Theme Palette (Inspired by Modern Card UI)
+local THEME = {
+    CardBg = Color3.fromRGB(24, 26, 32),
+    CardStroke = Color3.fromRGB(45, 48, 58),
+    HeaderTitle = Color3.fromRGB(245, 245, 245),
+    SectionTitle = Color3.fromRGB(130, 138, 153),
+    PillInactiveBg = Color3.fromRGB(32, 35, 44),
+    PillInactiveStroke = Color3.fromRGB(55, 60, 74),
+    PillInactiveText = Color3.fromRGB(180, 185, 198),
+    PillActiveTealBg = Color3.fromRGB(20, 45, 40),
+    PillActiveTealStroke = Color3.fromRGB(50, 205, 140),
+    PillActiveTealText = Color3.fromRGB(255, 255, 255),
+    PillActivePurpleBg = Color3.fromRGB(110, 90, 205),
+    PillActivePurpleStroke = Color3.fromRGB(150, 130, 245),
+    PillActivePurpleText = Color3.fromRGB(255, 255, 255),
+}
+
 -- Safe UI Container
 local function getSafeUiParent()
-    if gethui then
-        return gethui()
-    end
+    if gethui then return gethui() end
     local success, coreGui = pcall(function() return game:GetService("CoreGui") end)
-    if success and coreGui then
-        return coreGui
-    end
+    if success and coreGui then return coreGui end
     return player:WaitForChild("PlayerGui")
 end
 
 local parentContainer = getSafeUiParent()
 
--- Cleanup prior script runs
-local oldGui = parentContainer:FindFirstChild("BloxburgToolkitUI")
+-- Clean prior instances
+local oldGui = parentContainer:FindFirstChild("BT_LandscapeUI")
 if oldGui then oldGui:Destroy() end
+local oldPEsp = parentContainer:FindFirstChild("BT_PEspFolder")
+if oldPEsp then oldPEsp:Destroy() end
+local oldIEsp = parentContainer:FindFirstChild("BT_IEspFolder")
+if oldIEsp then oldIEsp:Destroy() end
 
-local oldPlayerEsp = parentContainer:FindFirstChild("BT_PlayerESP")
-if oldPlayerEsp then oldPlayerEsp:Destroy() end
-
-local oldItemEsp = parentContainer:FindFirstChild("BT_ItemESP")
-if oldItemEsp then oldItemEsp:Destroy() end
-
--- Dedicated folders inside protected UI space
 local playerEspFolder = Instance.new("Folder")
-playerEspFolder.Name = "BT_PlayerESP"
+playerEspFolder.Name = "BT_PEspFolder"
 playerEspFolder.Parent = parentContainer
 
 local itemEspFolder = Instance.new("Folder")
-itemEspFolder.Name = "BT_ItemESP"
+itemEspFolder.Name = "BT_IEspFolder"
 itemEspFolder.Parent = parentContainer
 
--- ========== LEAK-FREE DRAG HELPER ==========
+-- ========== DRAG HELPER ==========
 local function makeDraggable(handle, target)
     local dragging = false
     local dragInput, dragStart, startPos
@@ -82,9 +92,7 @@ local function makeDraggable(handle, target)
     UserInputService.InputChanged:Connect(function(input)
         if dragging and input == dragInput then
             local delta = input.Position - dragStart
-            if delta.Magnitude > 4 then
-                moved = true
-            end
+            if delta.Magnitude > 4 then moved = true end
             target.Position = UDim2.new(
                 startPos.X.Scale, startPos.X.Offset + delta.X,
                 startPos.Y.Scale, startPos.Y.Offset + delta.Y
@@ -101,143 +109,186 @@ local function makeDraggable(handle, target)
     return function() return moved end
 end
 
--- ========== HORIZONTAL UI SETUP ==========
+-- ========== UI CONSTRUCTION ==========
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "BloxburgToolkitUI"
+screenGui.Name = "BT_LandscapeUI"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = parentContainer
 
--- Horizontal Dock (Width: 510, Height: 36)
-local mainFrame = Instance.new("Frame")
-mainFrame.Name = "MainDock"
-mainFrame.Size = UDim2.new(0, 510, 0, 36)
-mainFrame.Position = UDim2.new(0.5, -255, 0.04, 0) -- Centered near top of screen
-mainFrame.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
-mainFrame.BackgroundTransparency = 0.15
-mainFrame.BorderSizePixel = 0
-mainFrame.Parent = screenGui
+-- Main Landscape Card (360x210)
+local mainCard = Instance.new("Frame")
+mainCard.Name = "MainCard"
+mainCard.Size = UDim2.new(0, 360, 0, 210)
+mainCard.Position = UDim2.new(0.5, -180, 0.5, -105)
+mainCard.BackgroundColor3 = THEME.CardBg
+mainCard.BorderSizePixel = 0
+mainCard.Parent = screenGui
 
-local frameCorner = Instance.new("UICorner")
-frameCorner.CornerRadius = UDim.new(0, 8)
-frameCorner.Parent = mainFrame
+local cardCorner = Instance.new("UICorner")
+cardCorner.CornerRadius = UDim.new(0, 18)
+cardCorner.Parent = mainCard
 
-local listLayout = Instance.new("UIListLayout")
-listLayout.FillDirection = Enum.FillDirection.Horizontal
-listLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-listLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
-listLayout.SortOrder = Enum.SortOrder.LayoutOrder
-listLayout.Padding = UDim.new(0, 5)
-listLayout.Parent = mainFrame
+local cardStroke = Instance.new("UIStroke")
+cardStroke.Color = THEME.CardStroke
+cardStroke.Thickness = 1.5
+cardStroke.Parent = mainCard
 
-local framePadding = Instance.new("UIPadding")
-framePadding.PaddingLeft = UDim.new(0, 6)
-framePadding.PaddingRight = UDim.new(0, 6)
-framePadding.PaddingTop = UDim.new(0, 4)
-framePadding.PaddingBottom = UDim.new(0, 4)
-framePadding.Parent = mainFrame
+-- Top Header Bar
+local header = Instance.new("Frame")
+header.Name = "Header"
+header.Size = UDim2.new(1, 0, 0, 42)
+header.BackgroundTransparency = 1
+header.Parent = mainCard
 
--- Drag Grip Label
-local grip = Instance.new("TextLabel")
-grip.Name = "Grip"
-grip.LayoutOrder = 1
-grip.Size = UDim2.new(0, 40, 1, 0)
-grip.BackgroundTransparency = 1
-grip.Text = "≡ BT"
-grip.TextColor3 = Color3.fromRGB(200, 200, 200)
-grip.TextSize = 13
-grip.Font = Enum.Font.GothamBold
-grip.Parent = mainFrame
+-- Close / Minimize Button (✕)
+local closeBtn = Instance.new("TextButton")
+closeBtn.Name = "CloseBtn"
+closeBtn.Size = UDim2.new(0, 32, 0, 32)
+closeBtn.Position = UDim2.new(0, 10, 0, 5)
+closeBtn.BackgroundTransparency = 1
+closeBtn.Text = "✕"
+closeBtn.TextColor3 = THEME.HeaderTitle
+closeBtn.TextSize = 16
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.Parent = header
 
-local function createDockButton(name, text, width, order)
+-- Title Label
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Name = "TitleLabel"
+titleLabel.Size = UDim2.new(1, -90, 1, 0)
+titleLabel.Position = UDim2.new(0, 46, 0, 0)
+titleLabel.BackgroundTransparency = 1
+titleLabel.Text = "Bloxburg Toolkit"
+titleLabel.TextColor3 = THEME.HeaderTitle
+titleLabel.TextSize = 15
+titleLabel.Font = Enum.Font.GothamBold
+titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+titleLabel.Parent = header
+
+-- Reset All Button (↻)
+local resetBtn = Instance.new("TextButton")
+resetBtn.Name = "ResetBtn"
+resetBtn.Size = UDim2.new(0, 32, 0, 32)
+resetBtn.Position = UDim2.new(1, -40, 0, 5)
+resetBtn.BackgroundTransparency = 1
+resetBtn.Text = "↻"
+resetBtn.TextColor3 = THEME.SectionTitle
+resetBtn.TextSize = 18
+resetBtn.Font = Enum.Font.GothamBold
+resetBtn.Parent = header
+
+-- Helper: Create Section Title
+local function createSectionTitle(text, yPos)
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -30, 0, 16)
+    label.Position = UDim2.new(0, 16, 0, yPos)
+    label.BackgroundTransparency = 1
+    label.Text = text
+    label.TextColor3 = THEME.SectionTitle
+    label.TextSize = 11
+    label.Font = Enum.Font.GothamBold
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = mainCard
+    return label
+end
+
+-- Helper: Create Pill Button
+local function createPillButton(name, defaultText, xPos, yPos, width, height)
     local btn = Instance.new("TextButton")
     btn.Name = name
-    btn.LayoutOrder = order
-    btn.Size = UDim2.new(0, width, 1, 0)
-    btn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-    btn.Text = text
-    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Size = UDim2.new(0, width, 0, height or 32)
+    btn.Position = UDim2.new(0, xPos, 0, yPos)
+    btn.BackgroundColor3 = THEME.PillInactiveBg
+    btn.Text = defaultText
+    btn.TextColor3 = THEME.PillInactiveText
     btn.TextSize = 11
     btn.Font = Enum.Font.GothamBold
-    btn.Parent = mainFrame
+    btn.AutoButtonColor = false
+    btn.Parent = mainCard
 
     local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 6)
+    corner.CornerRadius = UDim.new(0, 16)
     corner.Parent = btn
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Name = "Stroke"
+    stroke.Color = THEME.PillInactiveStroke
+    stroke.Thickness = 1.2
+    stroke.Parent = btn
+
     return btn
 end
 
-local jumpBtn = createDockButton("JumpBtn", "Jump: OFF", 68, 2)
-local noclipBtn = createDockButton("NoclipBtn", "Noclip: OFF", 70, 3)
-local espBtn = createDockButton("PlayerEspBtn", "P-ESP: OFF", 68, 4)
-local itemEspBtn = createDockButton("ItemEspBtn", "I-ESP: OFF", 68, 5)
-local speedBtn = createDockButton("SpeedBtn", "Spd: OFF", 62, 6)
+-- Section 1: Movement
+createSectionTitle("Movement", 46)
+local jumpBtn = createPillButton("JumpBtn", "Inf Jump", 16, 66, 96)
+local noclipBtn = createPillButton("NoclipBtn", "Noclip", 118, 66, 88)
+local speedBtn = createPillButton("SpeedBtn", "Speed", 212, 66, 76)
 
--- Speed Input Box
+-- Speed Input Pill Box
 local speedBox = Instance.new("TextBox")
 speedBox.Name = "SpeedInput"
-speedBox.LayoutOrder = 7
-speedBox.Size = UDim2.new(0, 36, 1, 0)
-speedBox.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+speedBox.Size = UDim2.new(0, 48, 0, 32)
+speedBox.Position = UDim2.new(0, 294, 0, 66)
+speedBox.BackgroundColor3 = THEME.PillInactiveBg
 speedBox.Text = tostring(targetSpeed)
-speedBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-speedBox.TextSize = 11
+speedBox.TextColor3 = THEME.HeaderTitle
+speedBox.TextSize = 12
 speedBox.Font = Enum.Font.GothamBold
 speedBox.ClearTextOnFocus = false
-speedBox.Parent = mainFrame
+speedBox.Parent = mainCard
 
 local speedBoxCorner = Instance.new("UICorner")
-speedBoxCorner.CornerRadius = UDim.new(0, 6)
+speedBoxCorner.CornerRadius = UDim.new(0, 16)
 speedBoxCorner.Parent = speedBox
 
--- Minimize Button
-local minimizeBtn = Instance.new("TextButton")
-minimizeBtn.Name = "MinBtn"
-minimizeBtn.LayoutOrder = 8
-minimizeBtn.Size = UDim2.new(0, 24, 1, 0)
-minimizeBtn.BackgroundColor3 = Color3.fromRGB(230, 150, 20)
-minimizeBtn.Text = "–"
-minimizeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-minimizeBtn.TextSize = 14
-minimizeBtn.Font = Enum.Font.GothamBold
-minimizeBtn.Parent = mainFrame
+local speedBoxStroke = Instance.new("UIStroke")
+speedBoxStroke.Color = THEME.PillInactiveStroke
+speedBoxStroke.Thickness = 1.2
+speedBoxStroke.Parent = speedBox
 
-local minCorner = Instance.new("UICorner")
-minCorner.CornerRadius = UDim.new(0, 6)
-minCorner.Parent = minimizeBtn
+-- Section 2: Visuals & ESP
+createSectionTitle("Visuals & Detection", 112)
+local espBtn = createPillButton("PlayerEspBtn", "Player ESP", 16, 132, 110)
+local itemEspBtn = createPillButton("ItemEspBtn", "Item ESP", 132, 132, 110)
 
--- Minimized Floating Bubble
+-- Floating Minimized Pill
 local restoreBtn = Instance.new("TextButton")
-restoreBtn.Size = UDim2.new(0, 38, 0, 38)
-restoreBtn.Position = UDim2.new(0.5, -19, 0.04, 0)
-restoreBtn.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
-restoreBtn.BackgroundTransparency = 0.2
-restoreBtn.Text = "BT"
-restoreBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-restoreBtn.TextSize = 13
+restoreBtn.Size = UDim2.new(0, 68, 0, 32)
+restoreBtn.Position = UDim2.new(0.5, -34, 0.05, 0)
+restoreBtn.BackgroundColor3 = THEME.CardBg
+restoreBtn.Text = "⚡ Toolkit"
+restoreBtn.TextColor3 = THEME.HeaderTitle
+restoreBtn.TextSize = 11
 restoreBtn.Font = Enum.Font.GothamBold
 restoreBtn.Visible = false
 restoreBtn.Parent = screenGui
 
-local restoreCorner = Instance.new("UICorner")
-restoreCorner.CornerRadius = UDim.new(0, 10)
-restoreCorner.Parent = restoreBtn
+local resCorner = Instance.new("UICorner")
+resCorner.CornerRadius = UDim.new(0, 16)
+resCorner.Parent = restoreBtn
 
--- Drag & Minimize Logic
-makeDraggable(grip, mainFrame)
+local resStroke = Instance.new("UIStroke")
+resStroke.Color = THEME.PillActiveTealStroke
+resStroke.Thickness = 1.2
+resStroke.Parent = restoreBtn
+
+-- Drag & Minimize Connections
+makeDraggable(header, mainCard)
 local restoreWasDragged = makeDraggable(restoreBtn, restoreBtn)
 
-minimizeBtn.MouseButton1Click:Connect(function()
+closeBtn.MouseButton1Click:Connect(function()
     minimized = true
-    restoreBtn.Position = UDim2.new(mainFrame.Position.X.Scale, mainFrame.Position.X.Offset, mainFrame.Position.Y.Scale, mainFrame.Position.Y.Offset)
-    mainFrame.Visible = false
+    restoreBtn.Position = UDim2.new(mainCard.Position.X.Scale, mainCard.Position.X.Offset, mainCard.Position.Y.Scale, mainCard.Position.Y.Offset)
+    mainCard.Visible = false
     restoreBtn.Visible = true
 end)
 
 restoreBtn.MouseButton1Click:Connect(function()
     if restoreWasDragged() then return end
     minimized = false
-    mainFrame.Position = UDim2.new(restoreBtn.Position.X.Scale, restoreBtn.Position.X.Offset, restoreBtn.Position.Y.Scale, restoreBtn.Position.Y.Offset)
-    mainFrame.Visible = true
+    mainCard.Position = UDim2.new(restoreBtn.Position.X.Scale, restoreBtn.Position.X.Offset, restoreBtn.Position.Y.Scale, restoreBtn.Position.Y.Offset)
+    mainCard.Visible = true
     restoreBtn.Visible = false
 end)
 
@@ -251,18 +302,35 @@ speedBox.FocusLost:Connect(function()
     speedBox.Text = tostring(targetSpeed)
 end)
 
--- ========== TOGGLE FUNCTIONS ==========
+-- ========== PILL STYLE HANDLERS ==========
+local function updatePillVisual(btn, active, activeText, inactiveText, usePurple)
+    local stroke = btn:FindFirstChild("Stroke")
+    if active then
+        btn.BackgroundColor3 = usePurple and THEME.PillActivePurpleBg or THEME.PillActiveTealBg
+        btn.TextColor3 = usePurple and THEME.PillActivePurpleText or THEME.PillActiveTealText
+        if stroke then
+            stroke.Color = usePurple and THEME.PillActivePurpleStroke or THEME.PillActiveTealStroke
+        end
+        btn.Text = activeText .. " ✓"
+    else
+        btn.BackgroundColor3 = THEME.PillInactiveBg
+        btn.TextColor3 = THEME.PillInactiveText
+        if stroke then
+            stroke.Color = THEME.PillInactiveStroke
+        end
+        btn.Text = inactiveText
+    end
+end
+
 local function setJumpEnabled(state)
     infJumpEnabled = state
-    jumpBtn.BackgroundColor3 = infJumpEnabled and Color3.fromRGB(40, 180, 40) or Color3.fromRGB(200, 50, 50)
-    jumpBtn.Text = infJumpEnabled and "Jump: ON" or "Jump: OFF"
+    updatePillVisual(jumpBtn, infJumpEnabled, "Inf Jump", "Inf Jump", false)
 end
 
 local function setNoclipEnabled(state)
     noclipEnabled = state
-    noclipBtn.BackgroundColor3 = noclipEnabled and Color3.fromRGB(40, 180, 40) or Color3.fromRGB(200, 50, 50)
-    noclipBtn.Text = noclipEnabled and "Noclip: ON" or "Noclip: OFF"
-    
+    updatePillVisual(noclipBtn, noclipEnabled, "Noclip", "Noclip", false)
+
     if not noclipEnabled and player.Character then
         for _, part in ipairs(player.Character:GetDescendants()) do
             if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
@@ -272,10 +340,14 @@ local function setNoclipEnabled(state)
     end
 end
 
+local function setSpeedEnabled(state)
+    speedEnabled = state
+    updatePillVisual(speedBtn, speedEnabled, "Speed", "Speed", true) -- Uses purple accent from the image
+end
+
 local function setPlayerESPEnabled(state)
     espEnabled = state
-    espBtn.BackgroundColor3 = espEnabled and Color3.fromRGB(40, 180, 40) or Color3.fromRGB(200, 50, 50)
-    espBtn.Text = espEnabled and "P-ESP: ON" or "P-ESP: OFF"
+    updatePillVisual(espBtn, espEnabled, "Player ESP", "Player ESP", false)
     if not espEnabled then
         playerEspFolder:ClearAllChildren()
     end
@@ -283,42 +355,42 @@ end
 
 local function setItemESPEnabled(state)
     itemEspEnabled = state
-    itemEspBtn.BackgroundColor3 = itemEspEnabled and Color3.fromRGB(40, 180, 40) or Color3.fromRGB(200, 50, 50)
-    itemEspBtn.Text = itemEspEnabled and "I-ESP: ON" or "I-ESP: OFF"
+    updatePillVisual(itemEspBtn, itemEspEnabled, "Item ESP", "Item ESP", false)
     if not itemEspEnabled then
         itemEspFolder:ClearAllChildren()
     end
 end
 
-local function setSpeedEnabled(state)
-    speedEnabled = state
-    speedBtn.BackgroundColor3 = speedEnabled and Color3.fromRGB(40, 180, 40) or Color3.fromRGB(200, 50, 50)
-    speedBtn.Text = speedEnabled and "Spd: ON" or "Spd: OFF"
-end
-
+-- Button Clicks
 jumpBtn.MouseButton1Click:Connect(function() setJumpEnabled(not infJumpEnabled) end)
 noclipBtn.MouseButton1Click:Connect(function() setNoclipEnabled(not noclipEnabled) end)
+speedBtn.MouseButton1Click:Connect(function() setSpeedEnabled(not speedEnabled) end)
 espBtn.MouseButton1Click:Connect(function() setPlayerESPEnabled(not espEnabled) end)
 itemEspBtn.MouseButton1Click:Connect(function() setItemESPEnabled(not itemEspEnabled) end)
-speedBtn.MouseButton1Click:Connect(function() setSpeedEnabled(not speedEnabled) end)
 
--- PC Keybind Fallbacks
+-- Reset All (↻)
+resetBtn.MouseButton1Click:Connect(function()
+    setJumpEnabled(false)
+    setNoclipEnabled(false)
+    setSpeedEnabled(false)
+    setPlayerESPEnabled(false)
+    setItemESPEnabled(false)
+end)
+
+-- Keybind Fallbacks (PC)
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
-    if input.KeyCode == Enum.KeyCode.J then
-        setJumpEnabled(not infJumpEnabled)
-    elseif input.KeyCode == Enum.KeyCode.N then
-        setNoclipEnabled(not noclipEnabled)
-    elseif input.KeyCode == Enum.KeyCode.K then
-        setPlayerESPEnabled(not espEnabled)
-    elseif input.KeyCode == Enum.KeyCode.L then
-        setItemESPEnabled(not itemEspEnabled)
-    elseif input.KeyCode == Enum.KeyCode.B then
-        setSpeedEnabled(not speedEnabled)
+    if input.KeyCode == Enum.KeyCode.J then setJumpEnabled(not infJumpEnabled)
+    elseif input.KeyCode == Enum.KeyCode.N then setNoclipEnabled(not noclipEnabled)
+    elseif input.KeyCode == Enum.KeyCode.B then setSpeedEnabled(not speedEnabled)
+    elseif input.KeyCode == Enum.KeyCode.K then setPlayerESPEnabled(not espEnabled)
+    elseif input.KeyCode == Enum.KeyCode.L then setItemESPEnabled(not itemEspEnabled)
     end
 end)
 
--- ========== NOCLIP ENGINE LOOP ==========
+-- ========== ENGINE LOOPS ==========
+
+-- Noclip loop
 RunService.Stepped:Connect(function()
     if not noclipEnabled then return end
     local character = player.Character
@@ -331,7 +403,7 @@ RunService.Stepped:Connect(function()
     end
 end)
 
--- ========== PHYSICS-BASED VELOCITY SPEED LOOP ==========
+-- Physics-based Velocity Speed loop
 RunService.Heartbeat:Connect(function()
     if not speedEnabled then return end
     local character = player.Character
@@ -352,7 +424,7 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- ========== INFINITE JUMP WITH RAYCAST ==========
+-- Infinite Jump with Ground-Proximity Raycast
 local jumpRayParams = RaycastParams.new()
 jumpRayParams.FilterType = Enum.RaycastFilterType.Exclude
 jumpRayParams.IgnoreWater = true
@@ -374,7 +446,7 @@ UserInputService.JumpRequest:Connect(function()
     end
 end)
 
--- ========== PLAYER ESP ENGINE ==========
+-- ========== ESP BILLBOARD HELPERS ==========
 local function getDistColor(dist)
     if dist < 100 then return Color3.fromRGB(90, 255, 90) end
     if dist < 400 then return Color3.fromRGB(255, 220, 90) end
@@ -460,7 +532,7 @@ Players.PlayerRemoving:Connect(function(leavingPlayer)
     if tag then tag:Destroy() end
 end)
 
--- ========== ITEM ESP ENGINE ==========
+-- Item ESP Scanner
 local function getTargetPart(instance)
     if instance:IsA("BasePart") then
         return instance
@@ -541,7 +613,6 @@ RunService.Heartbeat:Connect(function()
 
     local now = os.clock()
 
-    -- Periodic Workspace Scan
     if now - lastItemScan >= ITEM_SCAN_INTERVAL then
         lastItemScan = now
         local newTracked = {}
@@ -599,7 +670,6 @@ RunService.Heartbeat:Connect(function()
         trackedItems = newTracked
     end
 
-    -- Fast Per-Frame Updates
     for id, data in pairs(trackedItems) do
         if data.part and data.part.Parent then
             local billboard = itemEspFolder:FindFirstChild(id) or createItemBillboard(id, data.part, data.name)
